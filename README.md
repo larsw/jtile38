@@ -101,20 +101,20 @@ Data persists in an append-only file (`<dir>/appendonly.aof`) in the same format
 
 ## Roadmap
 
-1. **MVP server** (this release): protocols, CRUD, search, AOF, expiry.
-2. **Compatibility**: run Tile38's own Go integration tests (`tests/`) against jtile38 through an
-   external-server switch in the test harness. Then fill the gaps: `JGET`/`JSET`/`JDEL` (port
-   `sjson`), `WHERE` expressions (port `tidwall/expr`), `CLIP`/`CLIPBY` (port `internal/clip`),
-   `BUFFER` (port `internal/buffer`), `SECTOR` (port `iwpnd/sectr`), A5 cells, `AOFSHRINK`, `CONFIG`,
-   `AUTH`/`requirepass`, protected mode, `INFO`, `ROLE`, `CLIENT`, `TIMEOUT`, WebSockets.
-3. **Geofencing**: `FENCE` live queries, `SETHOOK`/`SETCHAN`, pub/sub (`SUBSCRIBE`, `PSUBSCRIBE`),
-   roaming fences, and the hook queue.
-4. **Endpoints**: webhook delivery over HTTP, gRPC, Kafka, AMQP, MQTT, NATS, SQS, Google Pub/Sub,
-   Event Hubs, Redis and Disque, each as an optional module.
-5. **Replication**: `FOLLOW`, `READONLY`, `AOFMD5`, leader/follower sync.
-6. **Scripting**: `EVAL*` and `WHEREEVAL` (Lua via LuaJ or similar).
-7. **Operations**: Prometheus metrics, MVT tiles, a `tile38-benchmark` port, a Docker image.
-   Client library: live geofences (`FENCE`), pub/sub and hooks once the server supports them.
+The MVP (protocols, CRUD, search, AOF, expiry, client library and CLI) is done. The remaining work
+is tracked as [GitHub issues](https://github.com/larsw/jtile38/issues?q=is%3Aissue+label%3Aroadmap),
+grouped into milestones:
+
+1. [Compatibility](https://github.com/larsw/jtile38/milestone/1): run Tile38's own integration
+   tests against jtile38 and fill the command gaps
+2. [Geofencing](https://github.com/larsw/jtile38/milestone/2): live fences, webhooks, channels,
+   pub/sub and roaming
+3. [Endpoints](https://github.com/larsw/jtile38/milestone/3): hook delivery to HTTP, gRPC, Kafka,
+   MQTT and others
+4. [Replication](https://github.com/larsw/jtile38/milestone/4): leader/follower replication
+5. [Scripting](https://github.com/larsw/jtile38/milestone/5): Lua scripting
+6. [Operations](https://github.com/larsw/jtile38/milestone/6): metrics, vector tiles,
+   benchmarking, Docker and client-library follow-ups
 
 ## Development
 
@@ -135,5 +135,5 @@ upstream first):
 
 ## License
 
-MIT. See [LICENSE](LICENSE). jtile38 is derived from Tile38 and its dependencies, which are MIT
-licensed.
+MIT. See [LICENSE](LICENSE). jtile38 is derived from Tile38 and several of its dependencies; their
+copyright notices are in [NOTICE](NOTICE).
