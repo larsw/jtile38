@@ -23,14 +23,7 @@ search/A5                        # #7 A5 cells
 search/BUFFER                    # #5 BUFFER
 search/INTERSECTS_CLIPBY         # #4 CLIPBY
 search/WITHIN_CLIPBY             # #4 CLIPBY
-testcmd/ExpressionErrors         # #38 TEST, #3 WHERE expressions
-testcmd/Expressions              # #38 TEST, #3 WHERE expressions
-testcmd/INTERSECTS               # #38 TEST
-testcmd/INTERSECTS_CLIP          # #38 TEST, #4 CLIP
-testcmd/WITHIN                   # #38 TEST
-timeouts/no writes               # #12 TIMEOUT
-timeouts/no writes within scripts # #12 TIMEOUT, #30 Lua scripting
-timeouts/scripts                 # #12 TIMEOUT, #30 Lua scripting
-timeouts/search                  # #12 TIMEOUT
-timeouts/spatial                 # #12 TIMEOUT
-timeouts/within scripts          # #12 TIMEOUT, #30 Lua scripting
+testcmd/INTERSECTS_CLIP          # #4 CLIP
+timeouts/no writes within scripts # #30 Lua scripting
+timeouts/scripts # #30 Lua scripting
+timeouts/within scripts # #30 Lua scripting

@@ -245,8 +245,12 @@ class ScanWriter(
 
     override fun offset(): Long = cursor
 
+    private var steps = 0L
+
     override fun step(count: Long) {
         numberIters += count
+        // like upstream's nextStep: check the TIMEOUT deadline every 256 steps
+        if ((++steps and 255L) == 255L) msg.deadline?.check()
     }
 
     /** Returns false when iteration should stop. */

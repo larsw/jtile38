@@ -200,7 +200,10 @@ class Server(
             executor.submit {
                 try {
                     sock.use { handleConn(it, client) }
-                } catch (_: Exception) {
+                } catch (_: java.io.IOException) {
+                    // client went away
+                } catch (e: Throwable) {
+                    if (!stopped.get()) log.log(Level.WARNING, "connection ${client.remoteAddr} failed", e)
                 } finally {
                     clients.remove(client.id)
                 }
@@ -465,6 +468,21 @@ class Server(
             msg.outputType = ot
             return
         }
+        if (cmd == "timeout") {
+            // TIMEOUT seconds <command ...>: run the command with a deadline
+            val vs = msg.args
+            if (vs.size < 3 || vs[1] == "") {
+                writeErr(Errors.INVALID_NUMBER_OF_ARGUMENTS)
+                return
+            }
+            val secs = GoCompat.parseFloat(vs[1])
+            if (secs == null || secs < 0) {
+                writeErr("invalid argument '${vs[1]}'")
+                return
+            }
+            msg.args = vs.subList(2, vs.size)
+            msg.deadline = Deadline(System.nanoTime() + (secs * 1e9).toLong())
+        }
         try {
             val res = execute(msg)
             if (res is RespValue.Error) {
@@ -481,8 +499,20 @@ class Server(
         }
     }
 
-    /** Runs a command under the appropriate lock and returns its response. */
-    internal fun execute(msg: Message): RespValue =
+    /** Runs a command under the appropriate lock and returns its response, honoring a TIMEOUT deadline. */
+    internal fun execute(msg: Message): RespValue {
+        val dl = msg.deadline ?: return executeCommand(msg)
+        if (msg.command in WRITE_COMMANDS) throw CommandException("timeout not supported for '${msg.command}'")
+        try {
+            val res = executeCommand(msg)
+            dl.check()
+            return res
+        } catch (_: DeadlineExceeded) {
+            throw CommandException("timeout")
+        }
+    }
+
+    private fun executeCommand(msg: Message): RespValue =
         when (msg.command) {
             in WRITE_COMMANDS -> {
                 lock.write { executeWrite(msg).res }
@@ -574,6 +604,7 @@ class Server(
             "healthz" -> healthz(msg)
             "hooks", "chans" -> cmdHooks(msg)
             "info" -> cmdInfo(msg)
+            "test" -> cmdTest(msg)
             "role" -> cmdRole(msg)
             else -> throw CommandException("unknown command '${msg.args[0]}'")
         }

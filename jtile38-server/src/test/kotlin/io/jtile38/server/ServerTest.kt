@@ -197,6 +197,27 @@ class ServerTest {
     }
 
     @Test
+    fun testCommand() {
+        expect("OK", "SET", "fleet", "t1", "POINT", 33, -115)
+        expect("1", "TEST", "GET", "fleet", "t1", "WITHIN", "BOUNDS", 32, -116, 34, -114)
+        expect("0", "TEST", "GET", "fleet", "t1", "WITHIN", "CIRCLE", 40, -115, 1000)
+        expect("1", "TEST", "POINT", 33, -115, "INTERSECTS", "BOUNDS", 30, -120, 40, -110, "AND", "NOT", "CIRCLE", 0, 0, 100)
+        expect("1", "TEST", "SECTOR", 33, -115, 10000, 0, 90, "INTERSECTS", "POINT", 33.01, -114.99)
+    }
+
+    @Test
+    fun timeouts() {
+        for (i in 0 until 2000) raw("SET", "fleet", "t$i", "FIELD", "speed", i, "POINT", 33, -115)
+        expect("2000", "TIMEOUT", 10, "SCAN", "fleet", "WHERE", "speed", 0, 9999, "COUNT")
+        val e = assertFailsWith<JedisDataException> { raw("TIMEOUT", "0.000001", "SCAN", "fleet", "WHERE", "speed", 0, 9999, "COUNT") }
+        assertEquals("ERR timeout", e.message)
+        val w = assertFailsWith<JedisDataException> { raw("TIMEOUT", 1, "SET", "fleet", "x", "POINT", 1, 1) }
+        assertEquals("ERR timeout not supported for 'set'", w.message)
+        val n = assertFailsWith<JedisDataException> { raw("TIMEOUT", 1) }
+        assertEquals("ERR wrong number of arguments for 'timeout' command", n.message)
+    }
+
+    @Test
     fun errors() {
         val e = assertFailsWith<JedisDataException> { raw("GET", "fleet") }
         assertEquals("ERR wrong number of arguments for 'get' command", e.message)

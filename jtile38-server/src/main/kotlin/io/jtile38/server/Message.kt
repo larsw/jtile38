@@ -17,10 +17,34 @@ class Message(
 ) {
     var auth: String = ""
 
+    /** Deadline set by the TIMEOUT prefix, or null. */
+    internal var deadline: Deadline? = null
+
     /** The connection the message arrived on (null for AOF replay and internal commands). */
     internal var client: ClientConn? = null
 
-    val command: String by lazy { args[0].lowercase() }
+    val command: String get() = args[0].lowercase()
+}
+
+/** Thrown when a command runs past its TIMEOUT deadline. */
+internal object DeadlineExceeded : RuntimeException(null, null, false, false) {
+    private fun readResolve(): Any = DeadlineExceeded
+}
+
+/** A command deadline (Go `deadline.Deadline`), in [System.nanoTime] units. */
+internal class Deadline(
+    private val atNanos: Long,
+) {
+    @Volatile var hit = false
+        private set
+
+    /** Throws [DeadlineExceeded] once the deadline has passed. */
+    fun check() {
+        if (!hit && System.nanoTime() > atNanos) {
+            hit = true
+            throw DeadlineExceeded
+        }
+    }
 }
 
 /** An error returned to the client (Go `error` values from command handlers). */
