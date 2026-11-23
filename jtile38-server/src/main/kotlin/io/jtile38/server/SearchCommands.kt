@@ -371,7 +371,7 @@ private fun parseRectArea(
 }
 
 internal val NEARBY_TYPES = setOf("point")
-internal val WITHIN_OR_INTERSECTS_TYPES = setOf("bounds", "hash", "tile", "quadkey", "get", "object", "circle", "point")
+internal val WITHIN_OR_INTERSECTS_TYPES = setOf("bounds", "hash", "tile", "quadkey", "get", "object", "circle", "point", "sector")
 
 internal fun Server.searchArgs(
     cmd: String,
@@ -420,6 +420,22 @@ internal fun Server.searchArgs(
             val meters = GoCompat.parseFloat(smeters)
             if (meters == null || meters < 0) throw Errors.invalidArgument(smeters)
             a.obj = Circle(Point(lon, lat), meters, DEFAULT_CIRCLE_STEPS)
+        }
+
+        "sector" -> {
+            if (a.clip) throw Errors.invalidArgument("cannot clip with $ltyp")
+            val slat = t.required()
+            val slon = t.required()
+            val smeters = t.required()
+            val sb1 = t.required()
+            val sb2 = t.required()
+            val lat = parseF(slat)
+            val lon = parseF(slon)
+            val meters = parseF(smeters)
+            val b1 = parseF(sb1)
+            val b2 = parseF(sb2)
+            if (b1 == b2) throw CommandException("equal bearings ($sb1 == $sb2), use CIRCLE instead")
+            a.obj = parseGeoJson(Sector.json(lat, lon, meters, b1, b2))
         }
 
         "object" -> {

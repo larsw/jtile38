@@ -359,6 +359,7 @@ internal fun Server.cmdFlushdb(msg: Message): WriteResult {
  */
 internal fun Server.cmdSet(msg: Message): WriteResult {
     val start = System.nanoTime()
+    if (config.maxMemory > 0 && outOfMemory.get()) throw CommandException("OOM command not allowed when used memory > 'maxmemory'")
     val args = msg.args
     if (args.size < 3) throw Errors.invalidNumberOfArguments()
     val key = args[1]
@@ -488,6 +489,7 @@ internal fun Server.parseGeoJson(data: String): GeoObject =
 /** FSET key id (XX) field value (field value...) (RETURN ...) */
 internal fun Server.cmdFset(msg: Message): WriteResult {
     val start = System.nanoTime()
+    if (config.maxMemory > 0 && outOfMemory.get()) throw CommandException("OOM command not allowed when used memory > 'maxmemory'")
     val args = msg.args
     if (args.size < 5) throw Errors.invalidNumberOfArguments()
     val key = args[1]
@@ -707,19 +709,6 @@ internal fun Server.cmdStats(msg: Message): RespValue {
     return RespValue.array(vals)
 }
 
-/** SERVER (EXT) */
-internal fun Server.cmdServer(msg: Message): RespValue {
-    val start = System.nanoTime()
-    for (a in msg.args.drop(1)) {
-        if (a.lowercase() != "ext") throw Errors.invalidArgument(a)
-    }
-    val m = basicStats()
-    if (msg.outputType == OutputType.JSON) {
-        return RespValue.string("{\"ok\":true,\"stats\":${jsonMap(m)},\"elapsed\":\"${elapsed(start)}\"}")
-    }
-    return RespValue.array(respSimpleMap(m))
-}
-
 internal fun Server.basicStats(): Map<String, Any> {
     val rt = Runtime.getRuntime()
     val points = cols.values.sumOf { it.pointCount() }
@@ -738,11 +727,11 @@ internal fun Server.basicStats(): Map<String, Any> {
         "mem_alloc" to heap,
         "heap_size" to heap,
         "heap_released" to 0,
-        "max_heap_size" to 0,
+        "max_heap_size" to config.maxMemory,
         "avg_item_size" to if (points != 0) heap / points else 0,
         "version" to VERSION,
         "pointer_size" to 8,
-        "read_only" to false,
+        "read_only" to config.readOnly,
         "cpus" to rt.availableProcessors(),
         "threads" to Thread.activeCount(),
         "pending_events" to hookQueue.size(),

@@ -62,12 +62,13 @@ class Server(
     internal val cols = TreeMap<String, Collection>()
     internal val lock = ReentrantReadWriteLock()
     internal val parseOptions = ParseOptions.DEFAULT
-    internal val serverId: String =
-        java.util.UUID
-            .randomUUID()
-            .toString()
-            .replace("-", "")
-            .substring(0, 16)
+    internal val config: Config = Config.load(File(options.dir, "config"))
+    internal val serverId: String get() = config.serverId
+    internal val startedNanos = System.nanoTime()
+    internal val outOfMemory =
+        java.util.concurrent.atomic
+            .AtomicBoolean(false)
+    internal val statsExpired = AtomicLong()
 
     // geofencing state; hooks and groups are guarded by [lock]
     internal val groups = Groups()
@@ -85,9 +86,10 @@ class Server(
     private val stopped = AtomicBoolean(false)
     private var listener: ServerSocket? = null
     private val executor = Executors.newVirtualThreadPerTaskExecutor()
-    private val conns = ConcurrentHashMap.newKeySet<Socket>()
-    private val statsTotalConns = AtomicLong()
-    private val statsTotalCommands = AtomicLong()
+    internal val clients = ConcurrentHashMap<Long, ClientConn>()
+    private val clientIds = AtomicLong()
+    internal val statsTotalConns = AtomicLong()
+    internal val statsTotalCommands = AtomicLong()
 
     /** The bound port (useful when started with port 0). */
     val port: Int get() = listener?.localPort ?: options.port
@@ -110,7 +112,7 @@ class Server(
     override fun close() {
         if (!stopped.compareAndSet(false, true)) return
         listener?.close()
-        conns.forEach { runCatching { it.close() } }
+        clients.values.forEach { runCatching { it.socket.close() } }
         executor.shutdownNow()
         lock.write {
             hookRegistry.clear()
@@ -193,27 +195,26 @@ class Server(
                     continue
                 }
             statsTotalConns.incrementAndGet()
-            conns.add(sock)
+            val client = ClientConn(clientIds.incrementAndGet(), sock.remoteSocketAddress.toString().removePrefix("/"), sock)
+            clients[client.id] = client
             executor.submit {
                 try {
-                    sock.use { handleConn(it) }
+                    sock.use { handleConn(it, client) }
                 } catch (_: Exception) {
                 } finally {
-                    conns.remove(sock)
+                    clients.remove(client.id)
                 }
             }
         }
     }
 
-    private class Client {
-        var outputType: OutputType? = null
-    }
-
-    private fun handleConn(sock: Socket) {
+    private fun handleConn(
+        sock: Socket,
+        client: ClientConn,
+    ) {
         sock.tcpNoDelay = true
         val input: InputStream = sock.getInputStream()
         val output: OutputStream = sock.getOutputStream()
-        val client = Client()
         var buf = ByteArray(64 * 1024)
         var len = 0
         val out = ByteArrayOutputStream()
@@ -264,6 +265,8 @@ class Server(
                     break
                 }
                 statsTotalCommands.incrementAndGet()
+                msg.client = client
+                client.last = System.nanoTime()
                 try {
                     handleInputCommand(msg, out)
                 } catch (live: GoLive) {
@@ -493,6 +496,11 @@ class Server(
                 cmdPublish(msg)
             }
 
+            // system operations: no AOF, but the write lock
+            "config", "client" -> {
+                lock.write { if (msg.command == "config") cmdConfig(msg) else cmdClient(msg) }
+            }
+
             "subscribe", "psubscribe" -> {
                 if (msg.args.size < 2) throw Errors.invalidNumberOfArguments()
                 throw GoLive.Subscribe
@@ -565,6 +573,8 @@ class Server(
             "within", "intersects" -> cmdWithinOrIntersects(msg.command, msg)
             "healthz" -> healthz(msg)
             "hooks", "chans" -> cmdHooks(msg)
+            "info" -> cmdInfo(msg)
+            "role" -> cmdRole(msg)
             else -> throw CommandException("unknown command '${msg.args[0]}'")
         }
 
@@ -606,6 +616,21 @@ class Server(
 
     // ---- expiration ------------------------------------------------------------
 
+    private var lastMemCheck = System.nanoTime()
+
+    /** Updates [outOfMemory] from the used heap and the maxmemory setting (Go `checkOutOfMemory`). */
+    internal fun checkOutOfMemory() {
+        if (stopped.get()) return
+        val max = config.maxMemory
+        if (max == 0L) {
+            outOfMemory.set(false)
+            return
+        }
+        if (outOfMemory.get()) System.gc()
+        val rt = Runtime.getRuntime()
+        outOfMemory.set(rt.totalMemory() - rt.freeMemory() > max)
+    }
+
     private fun expireLoop() {
         while (!stopped.get()) {
             try {
@@ -621,6 +646,7 @@ class Server(
                         if (now < o.expires) {
                             false
                         } else {
+                            statsExpired.incrementAndGet()
                             msgs.add(Message(listOf("del", key, o.id), ConnType.RESP, OutputType.RESP))
                             true
                         }
@@ -635,6 +661,10 @@ class Server(
             }
             // outside the server lock: may fsync the queue file
             hookQueue.maintain()
+            if (System.nanoTime() - lastMemCheck > 4_000_000_000L) {
+                lastMemCheck = System.nanoTime()
+                checkOutOfMemory()
+            }
         }
     }
 

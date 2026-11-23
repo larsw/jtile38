@@ -17,6 +17,9 @@ class Message(
 ) {
     var auth: String = ""
 
+    /** The connection the message arrived on (null for AOF replay and internal commands). */
+    internal var client: ClientConn? = null
+
     val command: String by lazy { args[0].lowercase() }
 }
 

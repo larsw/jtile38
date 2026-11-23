@@ -472,6 +472,8 @@ internal class Groups {
     /** Disconnects all objects from a hook. */
     fun disconnectHook(hook: String) = removeAll(byHook.tailMap(K(hook, "", "")).keys.takeWhile { it.hook == hook })
 
+    fun size(): Int = byHook.size
+
     fun clear() {
         byHook.clear()
         byObject.clear()
