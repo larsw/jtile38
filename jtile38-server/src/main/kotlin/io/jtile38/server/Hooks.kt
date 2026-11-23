@@ -126,59 +126,6 @@ class Hook(
     }
 }
 
-/**
- * Queue of webhook messages waiting for delivery. Entries expire after 30 seconds, like
- * upstream's buntdb-backed queue. Unlike upstream, the queue is kept in memory only.
- */
-internal class HookQueue {
-    class Entry(
-        val idx: Long,
-        val hook: String,
-        val message: String,
-        val expiresAt: Long,
-    )
-
-    private val entries = TreeMap<Long, Entry>()
-    private var qidx = 0L
-
-    @Synchronized
-    fun add(messages: List<String>) {
-        val exp = System.nanoTime() + TTL_NANOS
-        for (m in messages) {
-            qidx++
-            entries[qidx] = Entry(qidx, Gjson.get(m, "hook").string(), m, exp)
-        }
-    }
-
-    /** Removes and returns the live entries for [hook], in queue order. */
-    @Synchronized
-    fun take(hook: String): List<Entry> {
-        val now = System.nanoTime()
-        entries.values.removeIf { it.expiresAt <= now }
-        val out = entries.values.filter { it.hook == hook }
-        out.forEach { entries.remove(it.idx) }
-        return out
-    }
-
-    @Synchronized
-    fun reinsert(es: List<Entry>) {
-        val now = System.nanoTime()
-        for (e in es) if (e.expiresAt > now) entries[e.idx] = e
-    }
-
-    /** Number of pending messages (the `pending_events` stat). */
-    @Synchronized
-    fun size(): Int {
-        val now = System.nanoTime()
-        entries.values.removeIf { it.expiresAt <= now }
-        return entries.size
-    }
-
-    private companion object {
-        const val TTL_NANOS = 30_000_000_000L
-    }
-}
-
 /** Registered hooks and channels plus their spatial indexes. Guarded by the server lock. */
 internal class HookRegistry {
     val hooks = TreeMap<String, Hook>()

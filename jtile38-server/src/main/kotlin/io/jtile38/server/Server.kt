@@ -72,7 +72,7 @@ class Server(
     // geofencing state; hooks and groups are guarded by [lock]
     internal val groups = Groups()
     internal val hookRegistry = HookRegistry()
-    internal val hookQueue = HookQueue()
+    internal val hookQueue = HookQueue(if (options.appendOnly) File(options.dir, "queue.db") else null)
     internal val pubsub = PubSub()
     internal val endpointManager = EndpointManager { channel, message -> pubsub.publish(channel, message) }
     internal val lives: MutableSet<LiveFence> = ConcurrentHashMap.newKeySet()
@@ -96,6 +96,8 @@ class Server(
 
     /** Loads the AOF, binds the listener and starts accepting connections in the background. */
     fun start(): Server {
+        // like upstream, the hook queue is loaded before the AOF re-creates the hooks
+        hookQueue.open()
         if (options.appendOnly) openAof()
         val ss = ServerSocket(options.port, 1024, InetAddress.getByName(options.host))
         listener = ss
@@ -112,6 +114,7 @@ class Server(
         executor.shutdownNow()
         lock.write {
             hookRegistry.clear()
+            hookQueue.close()
             flushAof()
             aof?.close()
         }
@@ -630,6 +633,8 @@ class Server(
                 for (m in msgs) executeWrite(m)
                 if (msgs.isNotEmpty()) flushAof()
             }
+            // outside the server lock: may fsync the queue file
+            hookQueue.maintain()
         }
     }
 

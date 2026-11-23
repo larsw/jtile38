@@ -102,8 +102,9 @@ Geofencing: live fences (`NEARBY`/`WITHIN`/`INTERSECTS ... FENCE` with `DETECT`,
 `PDELCHAN`, `CHANS`), pub/sub (`SUBSCRIBE`, `PSUBSCRIBE`, `PUBLISH`) and webhooks (`SETHOOK`,
 `DELHOOK`, `PDELHOOK`, `HOOKS`, with `META` and `EX`). Webhooks deliver to `http://` and
 `https://` endpoints; other endpoint types (Kafka, MQTT, gRPC, ...) are planned. Undelivered webhook
-messages are retried for 30 seconds, as in Tile38, but the queue is kept in memory rather than on
-disk.
+messages are retried for 30 seconds and survive restarts: like Tile38, they are kept in
+`<dir>/queue.db`, which uses the same file format, so a data directory can be moved between Tile38
+and jtile38.
 
 Data persists in an append-only file (`<dir>/appendonly.aof`) in the same format as Tile38.
 
