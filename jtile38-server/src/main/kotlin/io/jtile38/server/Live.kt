@@ -84,9 +84,14 @@ internal fun writeLiveMessage(
     }
 }
 
-/** A live geofence connection. */
+/**
+ * A live geofence connection. Messages are computed by the writing thread while it holds the server
+ * write lock, so each message reflects the data as of its write; the connection thread only sends.
+ */
 internal class LiveFence(
     val key: String,
+    val spec: FenceSpec,
+    val sw: ScanWriter,
 ) {
     val queue = LinkedBlockingQueue<Any>()
 }
@@ -100,7 +105,7 @@ internal fun Server.goLiveFence(
     input: LiveReader,
     out: OutputStream,
 ) {
-    val lf = LiveFence(live.spec.key)
+    val lf = LiveFence(live.spec.key, live.spec, live.sw)
     lives.add(lf)
     try {
         Thread.ofVirtual().start {
@@ -118,11 +123,10 @@ internal fun Server.goLiveFence(
         val hello = if (msg.outputType == OutputType.JSON) "\$23\r\n{\"ok\":true,\"live\":true}\r\n" else "+OK\r\n"
         writeLiveMessage(out, hello, false, msg.connType)
         while (true) {
-            val d = lf.queue.take()
-            if (d === Quit) return
-            val msgs = lock.write { Fences.match(this, "", live.sw, live.spec, emptyList(), d as CommandDetails) }
-            for (m in msgs) writeLiveMessage(out, m, true, msg.connType)
-            statsMsgsSent.addAndGet(msgs.size.toLong())
+            val m = lf.queue.take()
+            if (m === Quit) return
+            writeLiveMessage(out, m as String, true, msg.connType)
+            statsMsgsSent.incrementAndGet()
         }
     } catch (_: java.io.IOException) {
     } finally {

@@ -1,0 +1,94 @@
+diff --git a/tests/mock_test.go b/tests/mock_test.go
+index e93e990..1acabf1 100644
+--- a/tests/mock_test.go
++++ b/tests/mock_test.go
+@@ -7,6 +7,7 @@ import (
+ 	"math/rand"
+ 	"net"
+ 	"os"
++	"os/exec"
+ 	"path/filepath"
+ 	"strings"
+ 	"sync/atomic"
+@@ -36,6 +37,7 @@ func mockCleanup(silent bool) {
+ }
+ 
+ type mockServer struct {
++	proc     *exec.Cmd // external server process (TILE38_EXTERNAL_SERVER)
+ 	closed   bool
+ 	port     int
+ 	mport    int
+@@ -109,6 +111,43 @@ func mockOpenServer(opts MockServerOptions) (*mockServer, error) {
+ 		s.mport = getNextPort()
+ 	}
+ 	var ferr atomic.Pointer[error] // ferr for when the server fails to start
++	if ext := os.Getenv("TILE38_EXTERNAL_SERVER"); ext != "" {
++		// Run the tests against an external server binary (e.g. jtile38) that
++		// accepts the tile38-server flags -h, -p and -d.
++		if err := os.MkdirAll(dir, 0777); err != nil {
++			return nil, err
++		}
++		args := strings.Fields(ext)
++		args = append(args, "-h", "127.0.0.1", "-p", fmt.Sprint(port), "-d", dir)
++		s.proc = exec.Command(args[0], args[1:]...)
++		// A server that fails to start prints "error: <message>" on stderr
++		// and exits; report that message like the in-process server does.
++		var stderr strings.Builder
++		s.proc.Stderr = &stderr
++		if os.Getenv("PRINTLOG") == "1" {
++			s.proc.Stdout = os.Stderr
++			s.proc.Stderr = io.MultiWriter(os.Stderr, &stderr)
++		}
++		if err := s.proc.Start(); err != nil {
++			return nil, err
++		}
++		go func() {
++			s.proc.Wait()
++			msg := "server exited"
++			for _, line := range strings.Split(stderr.String(), "\n") {
++				if strings.HasPrefix(line, "error: ") {
++					msg = strings.TrimPrefix(line, "error: ")
++				}
++			}
++			err := errors.New(msg)
++			ferr.CompareAndSwap(nil, &err)
++		}()
++		if err := s.waitForStartup(&ferr); err != nil {
++			s.Close()
++			return nil, err
++		}
++		return s, nil
++	}
+ 	go func() {
+ 		sopts := server.Options{
+ 			Host:              "localhost",
+@@ -172,7 +211,11 @@ func (mc *mockServer) Close() {
+ 		return
+ 	}
+ 	mc.closed = true
+-	mc.shutdown <- true
++	if mc.proc != nil {
++		mc.proc.Process.Kill()
++	} else {
++		mc.shutdown <- true
++	}
+ 	if mc.conn != nil {
+ 		mc.conn.Close()
+ 	}
+diff --git a/tests/tests_test.go b/tests/tests_test.go
+index 260ab9a..bdee649 100644
+--- a/tests/tests_test.go
++++ b/tests/tests_test.go
+@@ -225,6 +225,12 @@ func (s *testGroupSub) run() (err error) {
+ 		s.err = err
+ 		s.done.Store(true)
+ 	}()
++	// Report a panic as a failure of this sub-test instead of aborting the run.
++	defer func() {
++		if v := recover(); v != nil {
++			err = fmt.Errorf("panic: %v", v)
++		}
++	}()
+ 	return func() error {
+ 		mc, err := mockOpenServer(MockServerOptions{
+ 			Silent:  true,

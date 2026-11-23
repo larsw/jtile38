@@ -1,0 +1,47 @@
+# Upstream sub-tests that are expected to fail against jtile38, with the issue that will fix them.
+# scripts/run-upstream-tests.sh fails when a test outside this list fails (a regression) and
+# reports tests in this list that now pass, so they can be removed.
+aof/AOF                          # #28 replication (AOF streaming)
+aof/AOFMD5                       # #28 replication (AOFMD5)
+aof/AOFSHRINK                    # #8 AOFSHRINK, #40 MASSINSERT
+aof/READONLY                     # #29 READONLY
+aof/migrate                      # #41 legacy AOF migration
+client/CLIENT                    # #11 CLIENT
+client/OUTPUT                    # #11 CLIENT LIST
+follower/follow                  # #28 replication, #9 CONFIG, #10 requirepass
+info/valid json                  # #11 INFO
+json/basic                       # #2 JSET/JGET/JDEL
+json/geojson                     # #2 JSET/JGET/JDEL
+json/number                      # #2 JSET/JGET/JDEL
+keys/FIELDS                      # #3 WHERE expressions
+keys/FSET                        # #9 CONFIG SET maxmemory
+keys/INFO                        # #11 INFO
+keys/SERVER                      # #11 SERVER EXT
+keys/SET                         # #9 CONFIG SET maxmemory
+keys/WHEREEVAL                   # #31 WHEREEVAL
+metrics/basic                    # #32 Prometheus metrics
+monitor/monitor                  # #39 MONITOR
+scripts/ATOMIC                   # #30 Lua scripting
+scripts/BASIC                    # #30 Lua scripting
+scripts/NONATOMIC                # #30 Lua scripting
+scripts/READONLY                 # #30 Lua scripting
+scripts/VULN                     # #30 Lua scripting
+search/A5                        # #7 A5 cells
+search/BUFFER                    # #5 BUFFER
+search/INTERSECTS                # #6 SECTOR
+search/INTERSECTS_CLIPBY         # #4 CLIPBY
+search/INTERSECTS_SECTOR         # #6 SECTOR
+search/WITHIN                    # #6 SECTOR
+search/WITHIN_CLIPBY             # #4 CLIPBY
+search/WITHIN_SECTOR             # #6 SECTOR
+testcmd/ExpressionErrors         # #38 TEST, #3 WHERE expressions
+testcmd/Expressions              # #38 TEST, #3 WHERE expressions
+testcmd/INTERSECTS               # #38 TEST
+testcmd/INTERSECTS_CLIP          # #38 TEST, #4 CLIP
+testcmd/WITHIN                   # #38 TEST
+timeouts/no writes               # #12 TIMEOUT
+timeouts/no writes within scripts # #12 TIMEOUT, #30 Lua scripting
+timeouts/scripts                 # #12 TIMEOUT, #30 Lua scripting
+timeouts/search                  # #12 TIMEOUT
+timeouts/spatial                 # #12 TIMEOUT
+timeouts/within scripts          # #12 TIMEOUT, #30 Lua scripting

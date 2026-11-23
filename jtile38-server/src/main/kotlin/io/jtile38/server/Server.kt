@@ -149,9 +149,7 @@ class Server(
                     executeWrite(msg, replay = true)
                 } catch (e: CommandException) {
                     // like upstream, missing keys or ids are not fatal (e.g. FSET after a rewrite)
-                    if (e.message != "key not found" && e.message != "id not found") {
-                        throw IllegalStateException("AOF replay failed for '${cmd.args[0]}': ${e.message}", e)
-                    }
+                    if (e.message != "key not found" && e.message != "id not found") throw e
                 }
                 count++
             }
@@ -544,7 +542,9 @@ class Server(
     private fun notify(d: CommandDetails) {
         if (d.key == "") return
         if (hookRegistry.hooks.isNotEmpty()) queueHooks(d)
-        for (lf in lives) if (lf.key == d.key) lf.queue.add(d)
+        for (lf in lives) {
+            if (lf.key == d.key) Fences.match(this, "", lf.sw, lf.spec, emptyList(), d).forEach { lf.queue.add(it) }
+        }
     }
 
     private fun executeRead(msg: Message): RespValue =

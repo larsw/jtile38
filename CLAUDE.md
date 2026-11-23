@@ -24,3 +24,9 @@ JVM (Kotlin) port of [Tile38](https://github.com/tidwall/tile38). MIT licensed.
   upstream copyright/MIT notice in the file header.
 - Strings coming off the wire are "byte strings" (ISO-8859-1, one char per byte) to mirror Go's
   byte-oriented `string`.
+
+## Compatibility testing
+
+- After changing the server, run `scripts/run-upstream-tests.sh` (Tile38's own integration suite
+  against jtile38; needs Go). It must report "No regressions". When a fix makes a sub-test pass,
+  remove it from `compat/upstream-tests/expected-failures.txt`.

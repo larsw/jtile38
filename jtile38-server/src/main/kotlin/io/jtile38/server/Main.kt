@@ -39,7 +39,14 @@ fun main(args: Array<String>) {
         }
         i++
     }
-    val server = Server(ServerOptions(host, port, dir, appendOnly, output)).start()
+    val server =
+        try {
+            Server(ServerOptions(host, port, dir, appendOnly, output)).start()
+        } catch (e: Exception) {
+            // the last "error: " line on stderr is the startup failure (used by test harnesses)
+            System.err.println("error: " + (e.message ?: e.toString()))
+            exitProcess(1)
+        }
     Runtime.getRuntime().addShutdownHook(Thread { server.close() })
     Thread.currentThread().join()
 }

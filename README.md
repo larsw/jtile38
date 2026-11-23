@@ -130,8 +130,12 @@ grouped into milestones:
 All Kotlin code is checked with ktlint during `mvn verify`. Run `mvn ktlint:format` to fix style
 issues. See [CLAUDE.md](CLAUDE.md) for conventions.
 
-Compatibility checks against the original Tile38 (build `tile38-server` and `tile38-cli` from
-upstream first):
+`scripts/run-upstream-tests.sh` runs Tile38's own integration test suite against jtile38 and fails
+on regressions; see [compat/upstream-tests](compat/upstream-tests/README.md). Currently 42 of its 86
+sub-tests pass, and each remaining failure is tracked in an issue.
+
+More compatibility checks against the original Tile38 (build `tile38-server` and `tile38-cli`
+from upstream first):
 
 - `TILE38_EXTERNAL_PORT=9851 mvn -pl jtile38-server test -Dtest=ServerTest` runs the Jedis
   integration suite against an already running server, which confirms that the test expectations

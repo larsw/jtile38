@@ -38,7 +38,8 @@ private fun parseReturn(
 ): Int {
     var i = start
     var j = start
-    while (j < start + 3) {
+    // Like upstream, the bound moves as i advances inside the loop.
+    while (j < i + 3) {
         if (j >= args.size) break
         when (args[j].lowercase()) {
             "withfields" -> {
@@ -312,6 +313,15 @@ internal fun Server.cmdRename(msg: Message): WriteResult {
     val key = args[1]
     val newKey = args[2]
     val col = cols[key] ?: throw Errors.keyNotFound()
+    var hasHook = false
+    var hasChannel = false
+    for (h in hookRegistry.hooks.values) {
+        if (h.key == key || h.key == newKey) {
+            if (h.channel) hasChannel = true else hasHook = true
+        }
+    }
+    if (hasHook) throw CommandException("key has hooks set")
+    if (hasChannel) throw CommandException("key has channels set")
     var updated = false
     if (cols[newKey] == null) {
         updated = true
