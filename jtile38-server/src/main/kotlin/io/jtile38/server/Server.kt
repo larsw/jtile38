@@ -56,7 +56,7 @@ internal fun okJson(start: Long): RespValue = RespValue.string("{\"ok\":true,\"e
 class Server(
     val options: ServerOptions = ServerOptions(),
 ) : AutoCloseable {
-    private val log = Logger.getLogger("jtile38")
+    internal val log: Logger = Logger.getLogger("jtile38")
 
     /** Collections by key. Guarded by [lock]. */
     internal val cols = TreeMap<String, Collection>()
@@ -68,6 +68,15 @@ class Server(
             .toString()
             .replace("-", "")
             .substring(0, 16)
+
+    // geofencing state; hooks and groups are guarded by [lock]
+    internal val groups = Groups()
+    internal val hookRegistry = HookRegistry()
+    internal val hookQueue = HookQueue()
+    internal val pubsub = PubSub()
+    internal val endpointManager = EndpointManager { channel, message -> pubsub.publish(channel, message) }
+    internal val lives: MutableSet<LiveFence> = ConcurrentHashMap.newKeySet()
+    internal val statsMsgsSent = AtomicLong()
 
     private var aof: FileOutputStream? = null
     private val aofSize = AtomicLong()
@@ -102,6 +111,7 @@ class Server(
         conns.forEach { runCatching { it.close() } }
         executor.shutdownNow()
         lock.write {
+            hookRegistry.clear()
             flushAof()
             aof?.close()
         }
@@ -133,9 +143,12 @@ class Server(
                 if (cmd.args.isEmpty()) continue
                 val msg = Message(cmd.args, ConnType.RESP, OutputType.RESP)
                 try {
-                    executeWrite(msg)
+                    executeWrite(msg, replay = true)
                 } catch (e: CommandException) {
-                    throw IllegalStateException("AOF replay failed for '${cmd.args[0]}': ${e.message}", e)
+                    // like upstream, missing keys or ids are not fatal (e.g. FSET after a rewrite)
+                    if (e.message != "key not found" && e.message != "id not found") {
+                        throw IllegalStateException("AOF replay failed for '${cmd.args[0]}': ${e.message}", e)
+                    }
                 }
                 count++
             }
@@ -250,7 +263,20 @@ class Server(
                     break
                 }
                 statsTotalCommands.incrementAndGet()
-                handleInputCommand(msg, out)
+                try {
+                    handleInputCommand(msg, out)
+                } catch (live: GoLive) {
+                    // detach: flush pending replies, then stream on this thread until the client leaves
+                    out.writeTo(output)
+                    out.reset()
+                    output.flush()
+                    val reader = LiveReader(input, buf.copyOfRange(off, len))
+                    when (live) {
+                        is GoLive.Fence -> goLiveFence(live, msg, reader, output)
+                        is GoLive.Subscribe -> goLiveSubscription(msg, reader, output)
+                    }
+                    return
+                }
                 if (msg.connType != ConnType.HTTP) client.outputType = msg.outputType
                 lastOutput = msg.outputType
                 if (msg.connType == ConnType.HTTP) {
@@ -454,16 +480,45 @@ class Server(
     /** Runs a command under the appropriate lock and returns its response. */
     internal fun execute(msg: Message): RespValue =
         when (msg.command) {
-            in WRITE_COMMANDS -> lock.write { executeWrite(msg).res }
-            "output" -> cmdOutput(msg)
-            "flushall" -> throw CommandException("unknown command '${msg.args[0]}'")
-            else -> lock.read { executeRead(msg) }
+            in WRITE_COMMANDS -> {
+                lock.write { executeWrite(msg).res }
+            }
+
+            "output" -> {
+                cmdOutput(msg)
+            }
+
+            "publish" -> {
+                cmdPublish(msg)
+            }
+
+            "subscribe", "psubscribe" -> {
+                if (msg.args.size < 2) throw Errors.invalidNumberOfArguments()
+                throw GoLive.Subscribe
+            }
+
+            "flushall" -> {
+                throw CommandException("unknown command '${msg.args[0]}'")
+            }
+
+            else -> {
+                lock.read { executeRead(msg) }
+            }
         }
 
-    /** Runs a write command; the caller must hold the write lock. */
-    private fun executeWrite(msg: Message): WriteResult {
+    /**
+     * Runs a write command; the caller must hold the write lock. Unless replaying the AOF, the
+     * write is appended to the AOF and forwarded to hooks and live fences.
+     */
+    private fun executeWrite(
+        msg: Message,
+        replay: Boolean = false,
+    ): WriteResult {
         val r =
             when (msg.command) {
+                "sethook", "setchan" -> cmdSetHook(msg)
+                "delhook", "delchan" -> cmdDelHook(msg)
+                "pdelhook", "pdelchan" -> cmdPdelHook(msg)
                 "set" -> cmdSet(msg)
                 "fset" -> cmdFset(msg)
                 "del" -> cmdDel(msg)
@@ -475,8 +530,18 @@ class Server(
                 "persist" -> cmdPersist(msg)
                 else -> throw CommandException("unknown command '${msg.args[0]}'")
             }
-        writeAof(msg.args, r.details)
+        if (!replay && r.details.updated) {
+            writeAof(msg.args, r.details)
+            if (r.details.parent) r.details.children.forEach { notify(it) } else notify(r.details)
+        }
         return r
+    }
+
+    /** Forwards a write to geofence hooks and live fences. Caller holds the write lock. */
+    private fun notify(d: CommandDetails) {
+        if (d.key == "") return
+        if (hookRegistry.hooks.isNotEmpty()) queueHooks(d)
+        for (lf in lives) if (lf.key == d.key) lf.queue.add(d)
     }
 
     private fun executeRead(msg: Message): RespValue =
@@ -496,6 +561,7 @@ class Server(
             "nearby" -> cmdNearby(msg)
             "within", "intersects" -> cmdWithinOrIntersects(msg.command, msg)
             "healthz" -> healthz(msg)
+            "hooks", "chans" -> cmdHooks(msg)
             else -> throw CommandException("unknown command '${msg.args[0]}'")
         }
 
@@ -557,6 +623,10 @@ class Server(
                         }
                     }
                 }
+                for (h in hookRegistry.hookExpires) {
+                    if (h.expires > now) break
+                    msgs.add(Message(listOf(if (h.channel) "delchan" else "delhook", h.name), ConnType.RESP, OutputType.RESP))
+                }
                 for (m in msgs) executeWrite(m)
                 if (msgs.isNotEmpty()) flushAof()
             }
@@ -564,7 +634,25 @@ class Server(
     }
 
     companion object {
-        private val WRITE_COMMANDS = setOf("set", "fset", "del", "pdel", "drop", "flushdb", "rename", "renamenx", "expire", "persist")
+        private val WRITE_COMMANDS =
+            setOf(
+                "set",
+                "fset",
+                "del",
+                "pdel",
+                "drop",
+                "flushdb",
+                "rename",
+                "renamenx",
+                "expire",
+                "persist",
+                "sethook",
+                "setchan",
+                "delhook",
+                "delchan",
+                "pdelhook",
+                "pdelchan",
+            )
     }
 }
 

@@ -43,9 +43,20 @@ object Errors {
     const val INVALID_NUMBER_OF_ARGUMENTS = "invalid number of arguments"
 }
 
-/** Details about a write, used for the AOF (and later geofence hooks). */
+/** Details about a write, used for the AOF, geofence hooks and live fences (Go `commandDetails`). */
 class CommandDetails(
     val command: String = "",
     val key: String = "",
     val updated: Boolean = false,
+    /** Target object (the deleted object for DEL). */
+    val obj: Item? = null,
+    /** Previous object, if any. */
+    val old: Item? = null,
+    /** New key for RENAME. */
+    val newKey: String = "",
+    val timestamp: java.time.ZonedDateTime = java.time.ZonedDateTime.now(),
+    /** When true, only [children] are forwarded to hooks and fences (e.g. PDEL). */
+    val parent: Boolean = false,
+    val pattern: String = "",
+    val children: List<CommandDetails> = emptyList(),
 )

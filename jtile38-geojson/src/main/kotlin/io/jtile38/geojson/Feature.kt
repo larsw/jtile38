@@ -2,6 +2,8 @@
 package io.jtile38.geojson
 
 import io.jtile38.geojson.geo.Geo
+import io.jtile38.geojson.geo.GoMath.cos
+import io.jtile38.geojson.geo.GoMath.sin
 import io.jtile38.geojson.geometry.IndexKind
 import io.jtile38.geojson.geometry.IndexOptions
 import io.jtile38.geojson.geometry.Line
@@ -11,8 +13,6 @@ import io.jtile38.geojson.geometry.Rect
 import io.jtile38.json.Gjson
 import io.jtile38.json.Pretty
 import kotlin.math.PI
-import kotlin.math.cos
-import kotlin.math.sin
 
 /** A GeoJSON Feature wrapping a geometry and its members (Go: geojson.Feature). */
 class Feature internal constructor(

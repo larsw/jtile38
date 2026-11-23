@@ -273,6 +273,9 @@ class ServerTest {
                 j.sendCommand(cmd("SET"), "fleet", "truck1", "FIELD", "speed", "5", "POINT", "33", "-112")
                 j.sendCommand(cmd("SET"), "fleet", "truck2", "POINT", "34", "-113")
                 j.sendCommand(cmd("DEL"), "fleet", "truck2")
+                j.sendCommand(cmd("SETCHAN"), "c1", "NEARBY", "fleet", "FENCE", "POINT", "33", "-112", "1000")
+                j.sendCommand(cmd("SETCHAN"), "c2", "NEARBY", "fleet", "FENCE", "POINT", "33", "-112", "1000")
+                j.sendCommand(cmd("DELCHAN"), "c2")
             }
         }
         Server(ServerOptions(port = 0, dir = dir.toString())).start().use { s ->
@@ -280,6 +283,10 @@ class ServerTest {
                 assertEquals(
                     "[0 [[truck1 {\"type\":\"Point\",\"coordinates\":[-112,33]} [speed 5]]]]",
                     fmt(j.sendCommand(cmd("SCAN"), "fleet")),
+                )
+                assertEquals(
+                    "[[c1 fleet [local://c1] [NEARBY fleet FENCE POINT 33 -112 1000] []]]",
+                    fmt(j.sendCommand(cmd("CHANS"), "*")),
                 )
             }
         }

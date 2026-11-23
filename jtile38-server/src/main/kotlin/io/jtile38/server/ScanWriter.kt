@@ -137,7 +137,7 @@ class ScanWriter(
     limitIn: Long,
     val wheres: List<WhereFilter>,
     val whereins: List<WhereInFilter>,
-    private val nofields: Boolean,
+    internal val nofields: Boolean,
 ) : Cursor {
     private val limit: Long = if (limitIn == 0L) (if (output == SearchOutput.COUNT) Long.MAX_VALUE else LIMIT_ITEMS) else limitIn
     private val fkeys = TreeSet<String>()
@@ -151,6 +151,9 @@ class ScanWriter(
     val globEverything = globs.isEmpty() || (globs.size == 1 && globs[0] == "*")
     var respOut: RespValue = RespValue.NULL
         private set
+
+    /** When true, fields are written per object as a JSON object (used by geofence messages). */
+    var fullFields = false
 
     private fun hasFieldsOutput() =
         when (output) {
@@ -208,7 +211,7 @@ class ScanWriter(
         }
     }
 
-    private fun fieldMatch(o: Item): Boolean {
+    internal fun fieldMatch(o: Item): Boolean {
         for (w in wheres) if (!w.matchField(getFieldValue(o, w.name))) return false
         for (w in whereins) if (!w.match(getFieldValue(o, w.name))) return false
         return true
@@ -218,6 +221,26 @@ class ScanWriter(
         if (globEverything) return true
         val v = if (matchValues) o.toString() else o.id
         return globs.any { Glob.matches(it, v) }
+    }
+
+    /** Glob and field test, as done for every search candidate. */
+    internal fun testObject(o: Item): Boolean = globMatch(o) && fieldMatch(o)
+
+    /** Pushes and immediately writes a single object (geofence messages). */
+    internal fun writeObject(opts: ScanParams) {
+        val n = filled.size
+        pushObject(opts)
+        if (filled.size > n) {
+            writeFilled(filled[filled.size - 1])
+            while (filled.size > n) filled.removeAt(filled.size - 1)
+        }
+    }
+
+    /** Returns and clears what has been written so far. */
+    internal fun takeOutput(): String {
+        val s = out.toString()
+        out.setLength(0)
+        return s
     }
 
     override fun offset(): Long = cursor
@@ -234,7 +257,7 @@ class ScanWriter(
         }
         count++
         if (output == SearchOutput.COUNT) return count < limit
-        opts.obj.fields.forEach { fkeys.add(it.name) }
+        if (!fullFields) opts.obj.fields.forEach { fkeys.add(it.name) }
         filled.add(opts)
         numberItems++
         if (numberItems == limit) {
@@ -250,7 +273,20 @@ class ScanWriter(
         if (msg.outputType == OutputType.JSON) {
             if (once) out.append(',') else once = true
             var jsfields = ""
-            if (hasFieldsOutput() && fkeys.isNotEmpty()) {
+            if (hasFieldsOutput() && fullFields) {
+                if (o.fields.size() > 0) {
+                    val sb = StringBuilder(",\"fields\":{")
+                    var i = 0
+                    o.fields.forEach {
+                        if (!it.value.isZero()) {
+                            if (i++ > 0) sb.append(',')
+                            sb.append(GoCompat.jsonString(it.name)).append(':').append(it.value.json())
+                        }
+                    }
+                    sb.append('}')
+                    jsfields = sb.toString()
+                }
+            } else if (hasFieldsOutput() && fkeys.isNotEmpty()) {
                 val sb = StringBuilder(",\"fields\":[")
                 fkeys.forEachIndexed { i, name ->
                     if (i > 0) sb.append(',')

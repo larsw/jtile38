@@ -239,9 +239,11 @@ internal fun Server.cmdDel(msg: Message): WriteResult {
         if (args[i].lowercase() == "erron404") erron404 = true else throw Errors.invalidArgument(args[i])
     }
     var updated = false
+    var old: Item? = null
     val col = cols[key]
     if (col != null) {
-        if (col.delete(id) != null) {
+        old = col.delete(id)
+        if (old != null) {
             if (col.count() == 0) cols.remove(key)
             updated = true
         } else if (erron404) {
@@ -250,8 +252,9 @@ internal fun Server.cmdDel(msg: Message): WriteResult {
     } else if (erron404) {
         throw Errors.keyNotFound()
     }
+    groups.disconnectObject(key, id)
     val res = if (msg.outputType == OutputType.JSON) okJson(start) else RespValue.integer(if (updated) 1 else 0)
-    return WriteResult(res, CommandDetails("del", key, updated))
+    return WriteResult(res, CommandDetails("del", key, updated, obj = old))
 }
 
 /** PDEL key pattern */
@@ -262,6 +265,7 @@ internal fun Server.cmdPdel(msg: Message): WriteResult {
     val key = args[1]
     val pattern = args[2]
     var deleted = 0
+    val children = ArrayList<CommandDetails>()
     val col = cols[key]
     if (col != null) {
         val g = Glob.parse(pattern, false)
@@ -275,14 +279,17 @@ internal fun Server.cmdPdel(msg: Message): WriteResult {
         } else {
             col.scanRange(g.limits[0], g.limits[1], false, null, iter)
         }
+        val now = java.time.ZonedDateTime.now()
         for (id in ids) {
-            col.delete(id)
+            val obj = col.delete(id)
+            children.add(CommandDetails("del", key, true, obj = obj, timestamp = now))
+            groups.disconnectObject(key, id)
             deleted++
         }
         if (col.count() == 0) cols.remove(key)
     }
     val res = if (msg.outputType == OutputType.JSON) okJson(start) else RespValue.integer(deleted)
-    return WriteResult(res, CommandDetails("pdel", key, deleted > 0))
+    return WriteResult(res, CommandDetails("pdel", key, deleted > 0, parent = true, pattern = pattern, children = children))
 }
 
 /** DROP key */
@@ -291,6 +298,7 @@ internal fun Server.cmdDrop(msg: Message): WriteResult {
     if (msg.args.size != 2) throw Errors.invalidNumberOfArguments()
     val key = msg.args[1]
     val updated = cols.remove(key) != null
+    groups.disconnectCollection(key)
     val res = if (msg.outputType == OutputType.JSON) okJson(start) else RespValue.integer(if (updated) 1 else 0)
     return WriteResult(res, CommandDetails("drop", key, updated))
 }
@@ -321,7 +329,7 @@ internal fun Server.cmdRename(msg: Message): WriteResult {
             !nx -> RespValue.OK
             else -> RespValue.integer(if (updated) 1 else 0)
         }
-    return WriteResult(res, CommandDetails("rename", key, updated))
+    return WriteResult(res, CommandDetails("rename", key, updated, newKey = newKey))
 }
 
 /** FLUSHDB */
@@ -329,6 +337,8 @@ internal fun Server.cmdFlushdb(msg: Message): WriteResult {
     val start = System.nanoTime()
     if (msg.args.size != 1) throw Errors.invalidNumberOfArguments()
     cols.clear()
+    hookRegistry.clear()
+    groups.clear()
     val res = if (msg.outputType == OutputType.JSON) okJson(start) else RespValue.OK
     return WriteResult(res, CommandDetails("flushdb", "", true))
 }
@@ -452,8 +462,8 @@ internal fun Server.cmdSet(msg: Message): WriteResult {
     var flist = col.get(id)?.fields ?: FieldList.EMPTY
     for (f in fields) flist = flist.set(f)
     val obj = Item(id, oobj, ex, flist)
-    col.set(obj)
-    val d = CommandDetails("set", key, true)
+    val old = col.set(obj)
+    val d = CommandDetails("set", key, true, obj = obj, old = old)
     if (ret) return WriteResult(buildObjectResponse(msg, obj, start, spec), d)
     return WriteResult(if (msg.outputType == OutputType.JSON) okJson(start) else RespValue.OK, d)
 }
@@ -515,7 +525,7 @@ internal fun Server.cmdFset(msg: Message): WriteResult {
         obj = Item(id, o.geo, o.expires, ofields)
         col.set(obj)
     }
-    val d = CommandDetails("fset", key, updateCount > 0)
+    val d = CommandDetails("fset", key, updateCount > 0, obj = obj)
     if (ret && obj != null) return WriteResult(buildObjectResponse(msg, obj, start, spec), d)
     val res = if (msg.outputType == OutputType.JSON) okJson(start) else RespValue.integer(updateCount)
     return WriteResult(res, d)
@@ -544,15 +554,17 @@ internal fun Server.cmdExpire(msg: Message): WriteResult {
     val id = args[2]
     val value = parseF(args[3])
     var ok = false
+    var obj: Item? = null
     val col = cols[key]
     if (col != null) {
         val o = col.get(id)
         if (o != null) {
             ok = true
-            col.set(Item(id, o.geo, nowNanos() + (1_000_000_000.0 * value).toLong(), o.fields))
+            obj = Item(id, o.geo, nowNanos() + (1_000_000_000.0 * value).toLong(), o.fields)
+            col.set(obj)
         }
     }
-    val d = if (ok) CommandDetails("expire", key, true) else CommandDetails()
+    val d = if (ok) CommandDetails("expire", key, true, obj = obj) else CommandDetails()
     if (msg.outputType == OutputType.JSON) {
         if (ok) return WriteResult(okJson(start), d)
         throw if (col == null) Errors.keyNotFound() else Errors.idNotFound()
@@ -578,12 +590,14 @@ internal fun Server.cmdPersist(msg: Message): WriteResult {
         throw Errors.idNotFound()
     }
     var cleared = false
+    var obj: Item? = null
     if (o.expires != 0L) {
-        col.set(Item(id, o.geo, 0, o.fields))
+        obj = Item(id, o.geo, 0, o.fields)
+        col.set(obj)
         cleared = true
     }
     val res = if (msg.outputType == OutputType.JSON) okJson(start) else RespValue.integer(if (cleared) 1 else 0)
-    return WriteResult(res, CommandDetails("persist", key, cleared))
+    return WriteResult(res, CommandDetails("persist", key, cleared, obj = obj))
 }
 
 /** TTL key id */
@@ -706,7 +720,7 @@ internal fun Server.basicStats(): Map<String, Any> {
         "pid" to ProcessHandle.current().pid(),
         "aof_size" to aofSize(),
         "num_collections" to cols.size,
-        "num_hooks" to 0,
+        "num_hooks" to hookRegistry.hooks.size,
         "in_memory_size" to cols.values.sumOf { it.totalWeight() },
         "num_points" to points,
         "num_objects" to cols.values.sumOf { it.count() },
@@ -721,7 +735,7 @@ internal fun Server.basicStats(): Map<String, Any> {
         "read_only" to false,
         "cpus" to rt.availableProcessors(),
         "threads" to Thread.activeCount(),
-        "pending_events" to 0,
+        "pending_events" to hookQueue.size(),
     )
 }
 

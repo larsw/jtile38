@@ -17,10 +17,14 @@ https://github.com/mmcloughlin/geohash
 Copyright (c) 2015 Michael McLoughlin
 Licensed under the MIT License.
 
-Go standard library (path.Match semantics, used by the glob matcher)
+Go standard library (path.Match semantics used by the glob matcher; the
+trigonometric functions of the math package, ported in GoMath)
 https://go.dev
 Copyright (c) 2009 The Go Authors
 Licensed under a BSD-style license.
+The Go math functions are derived from the Cephes Math Library,
+Copyright 1984, 1987, 1989, 1992, 2000 by Stephen L. Moshier, which may be
+used freely.
 
 The command catalog in jtile38-cli/src/main/resources/io/jtile38/cli/commands.json
 is copied from Tile38 (core/commands.json), Copyright (c) Joshua J Baker,

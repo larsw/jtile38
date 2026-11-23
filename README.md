@@ -7,7 +7,7 @@ libraries work against it.
 
 It also includes a Kotlin/Java client library and `jtile38-cli`, a port of `tile38-cli`.
 
-Status: **MVP**. Core CRUD and search commands work. Geofencing, replication and scripting
+Status: **MVP**. Core CRUD, search and geofencing commands work. Geofencing, replication and scripting
 are not ported yet. See the [roadmap](#roadmap).
 
 ## Requirements
@@ -97,6 +97,14 @@ options: `CURSOR`, `LIMIT`, `MATCH`, `WHERE` (range and comparison form), `WHERE
 `DISTANCE`, `SPARSE`, `ASC`/`DESC`. Outputs: `COUNT`, `IDS`, `OBJECTS`, `POINTS`, `BOUNDS`,
 `HASHES`.
 
+Geofencing: live fences (`NEARBY`/`WITHIN`/`INTERSECTS ... FENCE` with `DETECT`, `COMMANDS`,
+`NODWELL` and `ROAM key pattern meters [SCAN pattern]`), channels (`SETCHAN`, `DELCHAN`,
+`PDELCHAN`, `CHANS`), pub/sub (`SUBSCRIBE`, `PSUBSCRIBE`, `PUBLISH`) and webhooks (`SETHOOK`,
+`DELHOOK`, `PDELHOOK`, `HOOKS`, with `META` and `EX`). Webhooks deliver to `http://` and
+`https://` endpoints; other endpoint types (Kafka, MQTT, gRPC, ...) are planned. Undelivered webhook
+messages are retried for 30 seconds, as in Tile38, but the queue is kept in memory rather than on
+disk.
+
 Data persists in an append-only file (`<dir>/appendonly.aof`) in the same format as Tile38.
 
 ## Roadmap
@@ -131,6 +139,8 @@ upstream first):
   `tile38-cli` session against both servers and diffs the output, ignoring timings.
 - `scripts/compare-cli.sh <tile38-cli> <jtile38-cli.jar> <port>` runs the same sessions through
   both CLIs against one server and diffs the output.
+- `scripts/compare-fences.py <tile38-port> <jtile38-port>` runs a geofencing scenario (live fences,
+  roaming, channels and subscribers) against both servers and diffs everything the clients receive.
 - The client tests (`jtile38-client`) also honor `TILE38_EXTERNAL_PORT`.
 
 ## License

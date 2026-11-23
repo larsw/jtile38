@@ -4,14 +4,14 @@
 
 package io.jtile38.server
 
-import kotlin.math.atan
+import io.jtile38.geojson.geo.GoMath.atan
+import io.jtile38.geojson.geo.GoMath.sin
 import kotlin.math.ceil
 import kotlin.math.exp
 import kotlin.math.floor
 import kotlin.math.ln
 import kotlin.math.log10
 import kotlin.math.pow
-import kotlin.math.sin
 
 /** Geohash encoding/decoding compatible with mmcloughlin/geohash. */
 object Geohash {

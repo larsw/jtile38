@@ -31,6 +31,13 @@ internal class SearchArgs {
     var clip = false
     var hasBuffer = false
     var obj: GeoObject? = null
+    var detect: Set<String>? = null
+    var accept: Set<String>? = null
+    var nodwell = false
+    var roam: RoamSpec? = null
+
+    /** The geofence described by these arguments. */
+    fun fenceSpec(cmd: String) = FenceSpec(cmd, key, obj, globs, distance, detect, accept, nodwell, roam)
 }
 
 /** A simple cursor over an argument list (Go `tokenval`). */
@@ -74,7 +81,9 @@ private fun parseBaseTokens(
     cmd: String,
     t: Tokens,
     a: SearchArgs,
+    fromFence: Boolean = false,
 ) {
+    a.fence = fromFence
     a.key = t.next() ?: throw Errors.invalidNumberOfArguments()
     if (a.key == "") throw Errors.invalidNumberOfArguments()
     var slimit = ""
@@ -161,8 +170,42 @@ private fun parseBaseTokens(
 
             "fence" -> {
                 t.next()
-                if (a.fence) throw Errors.duplicateArgument(wtok.uppercase())
+                if (a.fence && !fromFence) throw Errors.duplicateArgument(wtok.uppercase())
                 a.fence = true
+            }
+
+            "commands" -> {
+                t.next()
+                if (a.accept != null) throw Errors.duplicateArgument(wtok.uppercase())
+                val peek = t.required()
+                val accept = LinkedHashSet<String>()
+                for (part0 in peek.split(",")) {
+                    val part = part0.trim().lowercase()
+                    if (part in accept) throw Errors.duplicateArgument(part0)
+                    accept.add(part)
+                }
+                a.accept = accept.ifEmpty { null }
+            }
+
+            "detect" -> {
+                t.next()
+                if (a.detect != null) throw Errors.duplicateArgument(wtok.uppercase())
+                val peek = t.required()
+                val detect = LinkedHashSet<String>()
+                for (part0 in peek.split(",")) {
+                    val part = part0.trim().lowercase()
+                    if (part !in setOf("inside", "outside", "enter", "exit", "cross")) throw Errors.invalidArgument(peek)
+                    if (part in detect) throw Errors.duplicateArgument(part0)
+                    detect.add(part)
+                }
+                a.detect = detect.ifEmpty { setOf("inside", "outside", "enter", "exit", "cross") }
+            }
+
+            "nodwell" -> {
+                t.next()
+                // Upstream checks DESC/ASC here (a copy-paste quirk); kept for compatibility.
+                if (a.desc || asc) throw Errors.duplicateArgument(wtok.uppercase())
+                a.nodwell = true
             }
 
             "distance" -> {
@@ -213,7 +256,7 @@ private fun parseBaseTokens(
     if (ssparse != "" && slimit != "") throw CommandException("LIMIT is not allowed when SPARSE is specified")
     if (scursor != "" && ssparse != "") throw CommandException("CURSOR is not allowed when SPARSE is specified")
     if (scursor != "" && a.fence) throw CommandException("CURSOR is not allowed when FENCE is specified")
-    if (a.fence) throw CommandException("FENCE is not supported yet")
+    if (a.detect != null && !a.fence) throw CommandException("DETECT is not allowed when FENCE is not specified")
     a.output = SearchOutput.OBJECTS
     var sprecision = ""
     val which = t.peek()
@@ -327,17 +370,18 @@ private fun parseRectArea(
     throw CommandException("not a rectangle")
 }
 
-private val NEARBY_TYPES = setOf("point")
-private val WITHIN_OR_INTERSECTS_TYPES = setOf("bounds", "hash", "tile", "quadkey", "get", "object", "circle", "point")
+internal val NEARBY_TYPES = setOf("point")
+internal val WITHIN_OR_INTERSECTS_TYPES = setOf("bounds", "hash", "tile", "quadkey", "get", "object", "circle", "point")
 
-private fun Server.searchArgs(
+internal fun Server.searchArgs(
     cmd: String,
     vs: List<String>,
     types: Set<String>,
+    fromFence: Boolean = false,
 ): SearchArgs {
     val t = Tokens(vs)
     val a = SearchArgs()
-    parseBaseTokens(cmd, t, a)
+    parseBaseTokens(cmd, t, a, fromFence)
     var typ = t.required()
     if (a.output == SearchOutput.BOUNDS && (cmd == "within" || cmd == "intersects")) {
         if (GoCompat.parseFloat(typ) != null) {
@@ -348,7 +392,8 @@ private fun Server.searchArgs(
         }
     }
     val ltyp = typ.lowercase()
-    if (ltyp !in types) throw Errors.invalidArgument(typ)
+    // roaming is allowed for nearby fences
+    if (ltyp !in types && !(a.fence && ltyp == "roam" && cmd == "nearby")) throw Errors.invalidArgument(typ)
     when (ltyp) {
         "point" -> {
             val lat = parseF(t.required())
@@ -393,6 +438,20 @@ private fun Server.searchArgs(
             val col = cols[key] ?: throw Errors.keyNotFound()
             a.obj = (col.get(id) ?: throw Errors.idNotFound()).geo
         }
+
+        "roam" -> {
+            val key = t.required()
+            val id = t.required()
+            val smeters = t.required()
+            val meters = GoCompat.parseFloat(smeters) ?: throw Errors.invalidArgument(smeters)
+            var scan = ""
+            val next = t.next()
+            if (next != null) {
+                if (next.lowercase() != "scan") throw Errors.invalidArgument(next)
+                scan = t.required()
+            }
+            a.roam = RoamSpec(key, id, Glob.isGlob(id), meters, scan)
+        }
     }
     if (t.hasNext()) {
         val tok = t.required()
@@ -423,6 +482,28 @@ private fun Server.newScanWriter(
     a.whereins,
     a.nofields,
 )
+
+/** A scan writer that renders geofence messages (always JSON). */
+internal fun Server.fenceScanWriter(
+    msg: Message,
+    a: SearchArgs,
+): ScanWriter {
+    val jmsg = Message(msg.args, msg.connType, OutputType.JSON)
+    return ScanWriter(
+        StringBuilder(),
+        jmsg,
+        cols[a.key],
+        a.output,
+        a.precision,
+        a.globs,
+        false,
+        a.cursor,
+        a.limit,
+        a.wheres,
+        a.whereins,
+        a.nofields,
+    )
+}
 
 private fun Server.finish(
     msg: Message,
@@ -523,6 +604,7 @@ internal fun Server.cmdSearch(msg: Message): RespValue {
 internal fun Server.cmdNearby(msg: Message): RespValue {
     val start = System.nanoTime()
     val a = searchArgs("nearby", msg.args.subList(1, msg.args.size), NEARBY_TYPES)
+    if (a.fence) throw GoLive.Fence(a.fenceSpec("nearby"), fenceScanWriter(msg, a))
     val out = StringBuilder()
     val sw = newScanWriter(out, msg, a, false)
     if (msg.outputType == OutputType.JSON) out.append("{\"ok\":true")
@@ -556,6 +638,7 @@ internal fun Server.cmdWithinOrIntersects(
 ): RespValue {
     val start = System.nanoTime()
     val a = searchArgs(cmd, msg.args.subList(1, msg.args.size), WITHIN_OR_INTERSECTS_TYPES)
+    if (a.fence) throw GoLive.Fence(a.fenceSpec(cmd), fenceScanWriter(msg, a))
     val out = StringBuilder()
     val sw = newScanWriter(out, msg, a, false)
     if (msg.outputType == OutputType.JSON) out.append("{\"ok\":true")

@@ -4,16 +4,16 @@
 package io.jtile38.server
 
 import io.jtile38.geojson.GeoObject
+import io.jtile38.geojson.geo.GoMath.asin
+import io.jtile38.geojson.geo.GoMath.cos
+import io.jtile38.geojson.geo.GoMath.sin
+import io.jtile38.geojson.geo.GoMath.tan
 import io.jtile38.geojson.geometry.Point
 import io.jtile38.geojson.geometry.Rect
 import io.jtile38.rtree.RTree
 import java.util.TreeMap
 import java.util.TreeSet
-import kotlin.math.asin
-import kotlin.math.cos
-import kotlin.math.sin
 import kotlin.math.sqrt
-import kotlin.math.tan
 
 /** Allows paging through Scan, Within, Intersects and Nearby. */
 interface Cursor {

@@ -1,13 +1,13 @@
 // Port of github.com/tidwall/geojson/geo (MIT License, Copyright (c) 2018 Joshua J Baker)
 package io.jtile38.geojson.geo
 
+import io.jtile38.geojson.geo.GoMath.acos
+import io.jtile38.geojson.geo.GoMath.asin
+import io.jtile38.geojson.geo.GoMath.atan2
+import io.jtile38.geojson.geo.GoMath.cos
+import io.jtile38.geojson.geo.GoMath.sin
 import kotlin.math.PI
-import kotlin.math.acos
-import kotlin.math.asin
-import kotlin.math.atan2
-import kotlin.math.cos
 import kotlin.math.pow
-import kotlin.math.sin
 import kotlin.math.sqrt
 
 /** Spherical earth calculations. Angles are in degrees, distances in meters. */
