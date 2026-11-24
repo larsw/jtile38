@@ -14,7 +14,6 @@ scripts/BASIC                    # #30 Lua scripting
 scripts/NONATOMIC                # #30 Lua scripting
 scripts/READONLY                 # #30 Lua scripting
 scripts/VULN                     # #30 Lua scripting
-search/A5                        # #7 A5 cells
 search/BUFFER                    # #5 BUFFER
 search/INTERSECTS_CLIPBY         # #4 CLIPBY
 search/WITHIN_CLIPBY             # #4 CLIPBY

@@ -61,6 +61,16 @@ private fun parseReturn(
                 spec.precision = p.toInt()
                 i += 2
             }
+
+            "a5" -> {
+                spec.kind = "a5"
+                j++
+                if (j == args.size) throw Errors.invalidNumberOfArguments()
+                val p = GoCompat.parseInt(args[j])
+                if (p == null || !A5Cells.validResolution(p)) throw Errors.invalidArgument(args[j])
+                spec.precision = p.toInt()
+                i += 2
+            }
         }
         j++
     }
@@ -113,6 +123,12 @@ internal fun Server.buildObjectResponse(
             val c = o.geo.center()
             val h = Geohash.encode(c.y, c.x, precision)
             if (json) buf.append(",\"hash\":\"").append(h).append('"') else vals.add(RespValue.string(h))
+        }
+
+        "a5" -> {
+            val c = o.geo.center()
+            val p = A5Cells.encodePoint(c.x, c.y, precision)
+            if (json) buf.append(",\"a5\":\"").append(p).append('"') else vals.add(RespValue.string(p))
         }
 
         "bounds" -> {
@@ -214,6 +230,15 @@ internal fun Server.cmdGet(msg: Message): RespValue {
                 if (i == args.size) throw Errors.invalidNumberOfArguments()
                 val p = GoCompat.parseInt(args[i])
                 if (p == null || p < 1 || p > 12) throw Errors.invalidArgument(args[i])
+                spec.precision = p.toInt()
+            }
+
+            "a5" -> {
+                spec.kind = "a5"
+                i++
+                if (i == args.size) throw Errors.invalidNumberOfArguments()
+                val p = GoCompat.parseInt(args[i])
+                if (p == null || !A5Cells.validResolution(p)) throw Errors.invalidArgument(args[i])
                 spec.precision = p.toInt()
             }
 
@@ -439,6 +464,15 @@ internal fun Server.cmdSet(msg: Message): WriteResult {
                 val (lat, lon) = Geohash.decode(args[i + 1])
                 i += 1
                 oobj = GeoPoint.of(Point(lon, lat))
+            }
+
+            "a5" -> {
+                if (i + 1 >= args.size) throw Errors.invalidNumberOfArguments()
+                val scell = args[i + 1]
+                i += 1
+                val cellId = A5Cells.decodeCell(scell) ?: throw Errors.invalidArgument(scell)
+                // Tile38 crashes on IDs that a5-go cannot decode; jtile38 rejects them
+                oobj = GeoPoint.of(A5Cells.cellCenter(cellId) ?: throw Errors.invalidArgument(scell))
             }
 
             "object" -> {

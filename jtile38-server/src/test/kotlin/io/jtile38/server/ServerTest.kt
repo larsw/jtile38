@@ -237,6 +237,36 @@ class ServerTest {
     }
 
     @Test
+    fun a5Cells() {
+        expect("OK", "SET", "fleet", "p", "POINT", 52, 13)
+        expect("51575d8000000000", "GET", "fleet", "p", "A5", 10)
+        expect("1200000000000000", "GET", "fleet", "p", "A5", 0)
+        expect("51575f0616c1e55c", "GET", "fleet", "p", "A5", 30)
+        expect("51575d8000000000", "SET", "fleet", "p", "POINT", 52, 13, "RETURN", "A5", 10)
+        expect("OK", "SET", "fleet", "q", "A5", "0x51575d8000000000")
+        expect("[51.99704441609796 13.056912597629548]", "GET", "fleet", "q", "POINT")
+        expect("[0 [[p 51575d8000000000] [q 51575d8000000000]]]", "SCAN", "fleet", "A5", 10)
+        expect("[0 [p q]]", "INTERSECTS", "fleet", "IDS", "A5", "51575d8000000000")
+        expect("0", "WITHIN", "fleet", "COUNT", "A5", "0200000000000000")
+        val e = assertFailsWith<JedisDataException> { raw("GET", "fleet", "p", "A5", 31) }
+        assertEquals("ERR invalid argument '31'", e.message)
+        val e2 = assertFailsWith<JedisDataException> { raw("INTERSECTS", "fleet", "IDS", "A5", "0") }
+        assertEquals("ERR invalid argument '0'", e2.message)
+    }
+
+    @Test
+    fun a5InvalidCells() {
+        // Tile38 crashes on these cell IDs (a5-go panics); jtile38 rejects them
+        assumeTrue(externalPort == null, "crashes Tile38")
+        for (id in listOf("1", "ffffffffffffffff", "1000000000000000")) {
+            val e = assertFailsWith<JedisDataException> { raw("SET", "fleet", "x", "A5", id) }
+            assertEquals("ERR invalid argument '$id'", e.message)
+            val e2 = assertFailsWith<JedisDataException> { raw("INTERSECTS", "fleet", "IDS", "A5", id) }
+            assertEquals("ERR invalid argument '$id'", e2.message)
+        }
+    }
+
+    @Test
     fun jsonCommands() {
         expect("OK", "JSET", "doc", "d1", "name.first", "Tom")
         expect("OK", "JSET", "doc", "d1", "age", "037")
