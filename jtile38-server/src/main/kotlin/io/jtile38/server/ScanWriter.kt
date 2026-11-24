@@ -11,7 +11,7 @@ import io.jtile38.json.Gjson
 import io.jtile38.resp.RespValue
 import java.util.TreeSet
 
-enum class SearchOutput { UNKNOWN, IDS, OBJECTS, COUNT, POINTS, HASHES, BOUNDS }
+enum class SearchOutput { UNKNOWN, IDS, OBJECTS, COUNT, POINTS, HASHES, A5, BOUNDS }
 
 const val LIMIT_ITEMS = 100L
 
@@ -357,6 +357,11 @@ class ScanWriter(
                         out.append(",\"hash\":\"").append(Geohash.encode(c.y, c.x, precision)).append('"')
                     }
 
+                    SearchOutput.A5 -> {
+                        val c = o.geo.center()
+                        out.append(",\"a5\":\"").append(A5Cells.encodePoint(c.x, c.y, precision)).append('"')
+                    }
+
                     SearchOutput.BOUNDS -> {
                         out.append(",\"bounds\":")
                         appendJsonSimpleBounds(out, o.geo)
@@ -397,6 +402,11 @@ class ScanWriter(
             SearchOutput.HASHES -> {
                 val c = o.geo.center()
                 vals.add(RespValue.string(Geohash.encode(c.y, c.x, precision)))
+            }
+
+            SearchOutput.A5 -> {
+                val c = o.geo.center()
+                vals.add(RespValue.string(A5Cells.encodePoint(c.x, c.y, precision)))
             }
 
             SearchOutput.BOUNDS -> {

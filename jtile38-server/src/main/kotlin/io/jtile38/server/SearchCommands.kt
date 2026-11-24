@@ -290,6 +290,13 @@ private fun parseBaseTokens(
                 consumed = false
             }
 
+            "a5" -> {
+                a.output = SearchOutput.A5
+                t.next()
+                sprecision = t.required()
+                consumed = false
+            }
+
             "bounds" -> {
                 a.output = SearchOutput.BOUNDS
             }
@@ -308,7 +315,13 @@ private fun parseBaseTokens(
     if (scursor != "") a.cursor = GoCompat.parseUint(scursor) ?: throw Errors.invalidArgument(scursor)
     if (sprecision != "") {
         val p = GoCompat.parseUint(sprecision) ?: throw Errors.invalidArgument(sprecision)
-        if (p == 0L || p > 12) throw Errors.invalidArgument(sprecision)
+        if (a.output == SearchOutput.A5) {
+            // A5 resolutions range from 0 (whole-world faces) to 30.
+            if (p > A5Cells.MAX_RESOLUTION) throw Errors.invalidArgument(sprecision)
+        } else if (p == 0L || p > 12) {
+            // geohash precision ranges from 1 to 12.
+            throw Errors.invalidArgument(sprecision)
+        }
         a.precision = p.toInt()
     }
     if (slimit != "") {
@@ -379,7 +392,7 @@ private fun parseRectArea(
 }
 
 internal val NEARBY_TYPES = setOf("point")
-internal val WITHIN_OR_INTERSECTS_TYPES = setOf("bounds", "hash", "tile", "quadkey", "get", "object", "circle", "point", "sector")
+internal val WITHIN_OR_INTERSECTS_TYPES = setOf("bounds", "hash", "tile", "quadkey", "get", "object", "circle", "point", "sector", "a5")
 
 internal fun Server.searchArgs(
     cmd: String,
@@ -453,6 +466,13 @@ internal fun Server.searchArgs(
 
         "bounds", "hash", "tile", "quadkey" -> {
             a.obj = parseRectArea(ltyp, t)
+        }
+
+        "a5" -> {
+            if (a.clip) throw Errors.invalidArgument("cannot clip with $ltyp")
+            val scell = t.required()
+            val cellId = A5Cells.decodeCell(scell) ?: throw Errors.invalidArgument(scell)
+            a.obj = A5Cells.cellPolygon(cellId) ?: throw Errors.invalidArgument(scell)
         }
 
         "get" -> {

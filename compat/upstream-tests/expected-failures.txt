@@ -14,7 +14,6 @@ scripts/BASIC                    # #30 Lua scripting
 scripts/NONATOMIC                # #30 Lua scripting
 scripts/READONLY                 # #30 Lua scripting
 scripts/VULN                     # #30 Lua scripting
-search/A5                        # #7 A5 cells
 timeouts/no writes within scripts # #30 Lua scripting
 timeouts/scripts # #30 Lua scripting
 timeouts/within scripts # #30 Lua scripting

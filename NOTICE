@@ -26,6 +26,16 @@ The Go math functions are derived from the Cephes Math Library,
 Copyright 1984, 1987, 1989, 1992, 2000 by Stephen L. Moshier, which may be
 used freely.
 
+A5 (a5-go, as used by Tile38: github.com/corewood-tech/a5go, imported as
+github.com/a5geo/a5-go), ported in jtile38-a5
+https://github.com/a5geo/a5-go
+Copyright (c) A5 contributors
+Licensed under the Apache License, Version 2.0 (see jtile38-a5/LICENSE).
+The jtile38-a5 module is a derivative work and is distributed under the
+Apache License, Version 2.0. Its authalic latitude conversion and polyhedral
+projection are adapted from the DGGAL project, Copyright (c) Ecere
+Corporation, BSD 3-Clause License.
+
 The command catalog in jtile38-cli/src/main/resources/io/jtile38/cli/commands.json
 is copied from Tile38 (core/commands.json), Copyright (c) Joshua J Baker,
 MIT License.

@@ -86,6 +86,7 @@ Searches are built as options, then an area, then an output (`asIds`, `asObjects
 | `jtile38-rtree` | `tidwall/rtree` | 2D R-tree with float32 coordinates and kNN search |
 | `jtile38-resp` | `tidwall/redcon`, `tidwall/resp` | RESP, native and telnet command reader; RESP values |
 | `jtile38-expr` | `tidwall/expr`, `tidwall/conv` | JavaScript-like expression evaluator for `WHERE` expressions |
+| `jtile38-a5` | `a5geo/a5-go` | A5 pentagonal discrete global grid (Apache License 2.0) |
 | `jtile38-server` | `tile38/internal/{server,collection,field,object,glob,bing}`, `mmcloughlin/geohash` | The server |
 | `jtile38-client` | | Client library (Kotlin and Java) |
 | `jtile38-cli` | `tile38/cmd/tile38-cli`, `core/commands.json` | Command line interface (JLine for line editing) |
@@ -97,20 +98,26 @@ and `TreeSet`, goroutines → virtual threads, `sync.RWMutex` → `ReentrantRead
 
 `PING`, `ECHO`, `QUIT`, `AUTH`, `OUTPUT`, `HEALTHZ`, `SERVER` (and `SERVER EXT`), `INFO`, `ROLE`, `STATS`,
 `CONFIG GET|SET|REWRITE`, `CLIENT LIST|GETNAME|SETNAME|KILL`, `TIMEOUT`, `AOFSHRINK`, `KEYS`, `SET` (`POINT`, `BOUNDS`,
-`HASH`, `OBJECT`, `STRING`, `FIELD`, `EX`, `NX`/`XX`, `RETURN`), `GET` (`WITHFIELDS`,
-`OBJECT`/`POINT`/`BOUNDS`/`HASH`), `DEL`, `PDEL`, `DROP`, `RENAME`, `RENAMENX`, `FLUSHDB`, `FSET`,
+`HASH`, `A5`, `OBJECT`, `STRING`, `FIELD`, `EX`, `NX`/`XX`, `RETURN`), `GET` (`WITHFIELDS`,
+`OBJECT`/`POINT`/`BOUNDS`/`HASH`/`A5`), `DEL`, `PDEL`, `DROP`, `RENAME`, `RENAMENX`, `FLUSHDB`, `FSET`,
 `FGET`, `FEXISTS`, `JGET`, `JSET`, `JDEL`, `EXISTS`, `EXPIRE`, `PERSIST`, `TTL`, `TYPE`, `BOUNDS`, `SCAN`, `SEARCH`,
 `NEARBY`, `WITHIN`, `INTERSECTS`, `TEST`.
 
-Search areas: `POINT`, `CIRCLE`, `BOUNDS`, `HASH`, `QUADKEY`, `TILE`, `OBJECT`, `GET`, `SECTOR`.
+Search areas: `POINT`, `CIRCLE`, `BOUNDS`, `HASH`, `QUADKEY`, `TILE`, `OBJECT`, `GET`, `SECTOR`, `A5`.
 `TEST` also combines areas with `AND`, `OR`, `NOT` and parentheses. Search
 options: `CURSOR`, `LIMIT`, `MATCH`, `WHERE` (range and comparison form, and expressions such as
 `WHERE "speed > 50 && properties.kind == 'truck'"`), `WHEREIN`, `NOFIELDS`, `DISTANCE`, `SPARSE`,
 `ASC`/`DESC`, `BUFFER meters` (grows the search area) and `CLIP` (`INTERSECTS` clips the returned
 objects to the area's bounding box). Outputs: `COUNT`, `IDS`, `OBJECTS`, `POINTS`, `BOUNDS`,
-`HASHES`. After the area, `CLIPBY BOUNDS|HASH|TILE|QUADKEY ...` clips the area itself, and
+`HASHES`, `A5`. After the area, `CLIPBY BOUNDS|HASH|TILE|QUADKEY ...` clips the area itself, and
 `TEST ... INTERSECTS CLIP <area>` returns the clipped object. Unlike Tile38, which crashes on it,
 `NEARBY ... BUFFER` returns an error.
+
+[A5](https://a5geo.org) cells are equal-area pentagons at resolutions 0 to 30, with hexadecimal
+cell IDs: `GET ... A5 res` and the `A5 res` search output encode an object's center, `SET ... A5 id`
+stores a cell's center and `WITHIN`/`INTERSECTS ... A5 id` search a cell. The cell math is
+bit-for-bit identical to Tile38's. Tile38 crashes on some malformed cell IDs (such as `1`);
+jtile38 replies `invalid argument` instead.
 
 `JGET`, `JSET` and `JDEL` edit an object's JSON document by path, with the full
 [gjson](https://github.com/tidwall/gjson/blob/master/SYNTAX.md) path syntax for `JGET`
@@ -154,7 +161,7 @@ All Kotlin code is checked with ktlint during `mvn verify`. Run `mvn ktlint:form
 issues. See [CLAUDE.md](CLAUDE.md) for conventions.
 
 `scripts/run-upstream-tests.sh` runs Tile38's own integration test suite against jtile38 and fails
-on regressions; see [compat/upstream-tests](compat/upstream-tests/README.md). Currently 69 of its 86
+on regressions; see [compat/upstream-tests](compat/upstream-tests/README.md). Currently 70 of its 86
 sub-tests pass, and each remaining failure is tracked in an issue.
 
 More compatibility checks against the original Tile38 (build `tile38-server` and `tile38-cli`
@@ -174,4 +181,5 @@ from upstream first):
 ## License
 
 MIT. See [LICENSE](LICENSE). jtile38 is derived from Tile38 and several of its dependencies; their
-copyright notices are in [NOTICE](NOTICE).
+copyright notices are in [NOTICE](NOTICE). The exception is `jtile38-a5`, a port of the A5 library,
+which is under the Apache License 2.0 (see [jtile38-a5/LICENSE](jtile38-a5/LICENSE)).
