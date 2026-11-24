@@ -1,7 +1,11 @@
 // Port of gjson.AppendJSONString (MIT License, Copyright (c) 2016 Josh Baker)
 package io.jtile38.json
 
-/** JSON string encoding compatible with gjson.AppendJSONString (HTML escaping enabled). */
+/**
+ * JSON string encoding compatible with gjson.AppendJSONString (HTML escaping enabled). The
+ * input is a byte string: bytes above 127 are decoded as UTF-8, invalid sequences become
+ * `�` and U+2028/U+2029 are escaped.
+ */
 object JsonString {
     private const val HEX = "0123456789abcdef"
 
@@ -65,20 +69,18 @@ object JsonString {
                 }
 
                 c.code > 127 -> {
-                    if (Character.isHighSurrogate(c)) {
-                        if (i + 1 < n && Character.isLowSurrogate(s[i + 1])) {
-                            sb.append(c).append(s[i + 1])
-                            i++
-                        } else {
-                            sb.append("\\ufffd")
-                        }
-                    } else if (Character.isLowSurrogate(c)) {
+                    // read utf8 character
+                    val d = JsonUtf8.decodeRune(s, i)
+                    val r = JsonUtf8.runeOf(d)
+                    val size = JsonUtf8.sizeOf(d)
+                    if (r == JsonUtf8.RUNE_ERROR && size == 1) {
                         sb.append("\\ufffd")
-                    } else if (c == ' ' || c == ' ') {
-                        sb.append("\\u202").append(HEX[c.code and 0xF])
+                    } else if (r == 0x2028 || r == 0x2029) {
+                        sb.append("\\u202").append(HEX[r and 0xF])
                     } else {
-                        sb.append(c)
+                        sb.append(s, i, i + size)
                     }
+                    i += size - 1
                 }
 
                 else -> {

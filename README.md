@@ -73,7 +73,7 @@ Searches are built as options, then an area, then an output (`asIds`, `asObjects
 
 | Module | Ports | Contents |
 |---|---|---|
-| `jtile38-json` | `tidwall/gjson`, `tidwall/pretty` (subset) | JSON validation, path queries, minification, Go-compatible number and string formatting |
+| `jtile38-json` | `tidwall/gjson`, `tidwall/sjson`, `tidwall/pretty`, `tidwall/match` | JSON validation, path queries (full gjson syntax), JSON editing, formatting, Go-compatible number and string formatting |
 | `jtile38-geojson` | `tidwall/geojson` | GeoJSON objects, planar geometry, geodesic helpers |
 | `jtile38-rtree` | `tidwall/rtree` | 2D R-tree with float32 coordinates and kNN search |
 | `jtile38-resp` | `tidwall/redcon`, `tidwall/resp` | RESP, native and telnet command reader; RESP values |
@@ -90,7 +90,7 @@ and `TreeSet`, goroutines → virtual threads, `sync.RWMutex` → `ReentrantRead
 `CONFIG GET|SET|REWRITE`, `CLIENT LIST|GETNAME|SETNAME|KILL`, `TIMEOUT`, `KEYS`, `SET` (`POINT`, `BOUNDS`,
 `HASH`, `OBJECT`, `STRING`, `FIELD`, `EX`, `NX`/`XX`, `RETURN`), `GET` (`WITHFIELDS`,
 `OBJECT`/`POINT`/`BOUNDS`/`HASH`), `DEL`, `PDEL`, `DROP`, `RENAME`, `RENAMENX`, `FLUSHDB`, `FSET`,
-`FGET`, `FEXISTS`, `EXISTS`, `EXPIRE`, `PERSIST`, `TTL`, `TYPE`, `BOUNDS`, `SCAN`, `SEARCH`,
+`FGET`, `FEXISTS`, `JGET`, `JSET`, `JDEL`, `EXISTS`, `EXPIRE`, `PERSIST`, `TTL`, `TYPE`, `BOUNDS`, `SCAN`, `SEARCH`,
 `NEARBY`, `WITHIN`, `INTERSECTS`, `TEST`.
 
 Search areas: `POINT`, `CIRCLE`, `BOUNDS`, `HASH`, `QUADKEY`, `TILE`, `OBJECT`, `GET`, `SECTOR`.
@@ -98,6 +98,12 @@ Search areas: `POINT`, `CIRCLE`, `BOUNDS`, `HASH`, `QUADKEY`, `TILE`, `OBJECT`, 
 options: `CURSOR`, `LIMIT`, `MATCH`, `WHERE` (range and comparison form), `WHEREIN`, `NOFIELDS`,
 `DISTANCE`, `SPARSE`, `ASC`/`DESC`. Outputs: `COUNT`, `IDS`, `OBJECTS`, `POINTS`, `BOUNDS`,
 `HASHES`.
+
+`JGET`, `JSET` and `JDEL` edit an object's JSON document by path, with the full
+[gjson](https://github.com/tidwall/gjson/blob/master/SYNTAX.md) path syntax for `JGET`
+(queries, modifiers, multipaths). One deliberate difference from Tile38: Tile38 runs `JDEL` as a
+read command, so its changes are not written to the AOF and are lost on restart; jtile38 treats
+`JDEL` as a write.
 
 Geofencing: live fences (`NEARBY`/`WITHIN`/`INTERSECTS ... FENCE` with `DETECT`, `COMMANDS`,
 `NODWELL` and `ROAM key pattern meters [SCAN pattern]`), channels (`SETCHAN`, `DELCHAN`,
@@ -133,7 +139,7 @@ All Kotlin code is checked with ktlint during `mvn verify`. Run `mvn ktlint:form
 issues. See [CLAUDE.md](CLAUDE.md) for conventions.
 
 `scripts/run-upstream-tests.sh` runs Tile38's own integration test suite against jtile38 and fails
-on regressions; see [compat/upstream-tests](compat/upstream-tests/README.md). Currently 60 of its 86
+on regressions; see [compat/upstream-tests](compat/upstream-tests/README.md). Currently 63 of its 86
 sub-tests pass, and each remaining failure is tracked in an issue.
 
 More compatibility checks against the original Tile38 (build `tile38-server` and `tile38-cli`

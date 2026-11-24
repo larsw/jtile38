@@ -1,0 +1,20 @@
+{"name":{"first":"Tom","last":"Anderson"},"age":37,"children":["Sara","Alex","Jack"],"fav.movie":"Deer Hunter","friends":[{"first":"Dale","last":"Murphy","age":44,"nets":["ig","fb","tw"]},{"first":"Roger","last":"Craig","age":68,"nets":["fb","tw"]},{"first":"Jane","last":"Murphy","age":47,"nets":["ig","tw"]}]}
+===
+{"type":"Feature","geometry":{"type":"Point","coordinates":[-112.2693,33.5123]},"properties":{"name":"trucké 😀","speed":90,"tags":["a","b"],"nested":{"x":{"y":[1,{"z":true}]}},"esc\"key":"v","dot.key":1,"html":"<a&b>"}}
+===
+[{"a":1},{"a":2,"b":[3,4]},{"b":"x"},5,"str",null,true,false,[1,[2,[3]]]]
+===
+{"a":[],"b":{},"c":[[]],"d":"","e":0,"f":-0.5e3,"g":1e400,"h":" \u0001\t","i":"bad\udc00","j":{"k":{"l":{"m":"deep"}}}}
+===
+  {"x" : [ 1 , 2 , 3 ] , "y" : { "z" : "w" } }  
+===
+{"vals":[{"n":1,"s":"apple"},{"n":2,"s":"Banana"},{"n":3,"s":"cherry"},{"n":"4","s":"date"},{"n":true},{"n":false},{"n":null}]}
+===
+{"a":"1"}
+{"a":"2"}
+{"a":"3","b":[1,2]}
+===
+"just a string"
+===
+123.456
+===

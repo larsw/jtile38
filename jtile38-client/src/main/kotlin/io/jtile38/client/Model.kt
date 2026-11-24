@@ -52,3 +52,15 @@ data class CollectionStats(
     val numPoints: Long,
     val numStrings: Long,
 )
+
+/** How [Tile38Client.Commands.jset] stores its value. */
+enum class JsonValueMode {
+    /** Numbers, `true`, `false` and `null` as JSON values, anything else as a string. */
+    AUTO,
+
+    /** The value is raw JSON. */
+    RAW,
+
+    /** The value is always a string. */
+    STR,
+}

@@ -145,6 +145,62 @@ class Tile38Client
             field: String,
         ): String? = execute("FGET", key, id, field).text()
 
+        /**
+         * JGET: the JSON document of an object, or the value at a gjson [path] in it (with [raw],
+         * the raw JSON of the value). Null when the key, id or path does not exist.
+         */
+        @JvmOverloads
+        fun jget(
+            key: String,
+            id: String,
+            path: String? = null,
+            raw: Boolean = false,
+        ): String? {
+            val args = mutableListOf<Any>("JGET", key, id)
+            if (path != null) args.add(path)
+            if (path != null && raw) args.add("RAW")
+            return execute(*args.toTypedArray()).text()
+        }
+
+        /**
+         * JSET: sets the value at [path] in an object's JSON document, creating the object if
+         * needed. By default numbers, `true`, `false` and `null` are stored as JSON values and
+         * anything else as a string; [mode] forces one or the other.
+         */
+        @JvmOverloads
+        fun jset(
+            key: String,
+            id: String,
+            path: String,
+            value: Any,
+            mode: JsonValueMode = JsonValueMode.AUTO,
+        ) {
+            val args = mutableListOf("JSET", key, id, path, value)
+            when (mode) {
+                JsonValueMode.AUTO -> {}
+
+                JsonValueMode.RAW -> {
+                    args.add("RAW")
+                }
+
+                JsonValueMode.STR -> {
+                    args.add("STR")
+                }
+            }
+            execute(*args.toTypedArray())
+        }
+
+        /** JDEL: deletes the value at [path] in an object's JSON document; returns true if it existed. */
+        fun jdel(
+            key: String,
+            id: String,
+            path: String,
+        ): Boolean {
+            val r = execute("JDEL", key, id, path)
+            // spatial objects are re-set with SET, which replies OK
+            return if (r is RespValue.Integer) r.value == 1L else !r.isNull()
+        }
+
         fun exists(
             key: String,
             id: String,

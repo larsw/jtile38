@@ -22,6 +22,13 @@ session() {
   c within fleet points get areas a; c intersects fleet bounds tile 1 1 1; c intersects fleet hashes 5 quadkey 0231
   c scan fleet where speed 50 2000 ids; c scan fleet match 'truck[12]' desc; c bounds fleet; c stats fleet nokey
   c get areas a; c ttl fleet truck1; c type fleet; c get nokey x; c set fleet x point a b; c fset fleet truck1 xx speed 0
+  c jset doc d1 name.first Tom; c jset doc d1 age 37; c jset doc d1 tags.-1 '"x"' raw; c jset doc d1 tags.-1 y str
+  c jset doc d1 num 0123; c jset doc d1 ok true; c jset doc d1 esc 'a"b<é'; c jget doc d1; c jget doc d1 tags.1; c jget doc d1 name raw
+  c jget doc d1 'tags|@reverse'; c jget doc d1 nope; c jdel doc d1 name.first; c jdel doc d1 name.first; c jdel doc d1 'tags.#'
+  c jget doc d1; c jget nokey x; c jget doc nox; c jdel nokey x y; c jset doc d1 a b c; c jset doc d1 tags.x 1; c jget doc d1 a b c d
+  c jset fleet truck1 coordinates.1 44; c jget fleet truck1; c jdel fleet truck1 type; c jget areas a properties.name; c jdel areas a properties.name; c jget areas a
+  c jset fleet truck2 properties.x 1; c get fleet truck2 withfields; c jset doc d2 0 x; c jget doc d2; c set doc s1 string hello; c jset doc s1 a 1; c jget doc s1
+  c --resp jget doc d1; c --resp jget doc nox; c --resp jget nokey x; c --resp jdel doc d1 nope; c --resp jdel doc d1 ok; c --resp jdel nokey a b; c --resp jset doc d3 a.b 1
   c --resp nearby fleet distance point 33.462 -112.268 6000; c --resp get fleet truck3 withfields point; c --resp scan fleet ids
 }
 

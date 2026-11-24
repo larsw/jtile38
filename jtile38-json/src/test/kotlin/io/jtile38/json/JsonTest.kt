@@ -89,7 +89,8 @@ class JsonTest {
         assertEquals(true, Gjson.parse("\"TRUE\"").bool())
         assertEquals(12L, Gjson.parse("\"12\"").int())
         assertEquals(2.5, Gjson.parse("\"2.5\"").float())
-        assertEquals("\u00e9\uD83D\uDE00", Gjson.parse("\"\\u00e9\\ud83d\\ude00\"").str)
+        // strings are byte strings: \u escapes unescape to UTF-8 bytes
+        assertEquals(bytes("\u00e9\uD83D\uDE00"), Gjson.parse("\"\\u00e9\\ud83d\\ude00\"").str)
     }
 
     @Test
@@ -117,7 +118,10 @@ class JsonTest {
 
     @Test
     fun strings() {
-        assertEquals("\"a\\\"b\\\\c\\n\\u0001\\u003c\\u003e\\u0026é\\u2028\"", JsonString.quote("a\"b\\c\n\u0001<>&é\u2028"))
+        assertEquals(
+            bytes("\"a\\\"b\\\\c\\n\\u0001\\u003c\\u003e\\u0026é\\u2028\\ufffd\""),
+            JsonString.quote(bytes("a\"b\\c\n\u0001<>&é\u2028") + "\u00ff"),
+        )
     }
 
     @Test
@@ -135,4 +139,7 @@ class JsonTest {
         assertTrue(Match.isPattern("ab*"))
         assertFalse(Match.isPattern("ab\\*"))
     }
+
+    /** UTF-8 encodes [s] into a byte string (one char per byte). */
+    private fun bytes(s: String): String = String(s.toByteArray(Charsets.UTF_8), Charsets.ISO_8859_1)
 }

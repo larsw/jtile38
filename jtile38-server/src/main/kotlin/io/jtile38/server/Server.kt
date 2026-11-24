@@ -567,6 +567,8 @@ class Server(
                 "rename", "renamenx" -> cmdRename(msg)
                 "expire" -> cmdExpire(msg)
                 "persist" -> cmdPersist(msg)
+                "jset" -> cmdJset(msg)
+                "jdel" -> cmdJdel(msg)
                 else -> throw CommandException("unknown command '${msg.args[0]}'")
             }
         if (!replay && r.details.updated) {
@@ -589,6 +591,7 @@ class Server(
         when (msg.command) {
             "get" -> cmdGet(msg)
             "fget" -> cmdFget(msg)
+            "jget" -> cmdJget(msg)
             "bounds" -> cmdBounds(msg)
             "type" -> cmdType(msg)
             "keys" -> cmdKeys(msg)
@@ -704,6 +707,8 @@ class Server(
             setOf(
                 "set",
                 "fset",
+                "jset",
+                "jdel",
                 "del",
                 "pdel",
                 "drop",

@@ -43,6 +43,25 @@ class Tile38ClientTest {
     fun flush() = t38.flushDb()
 
     @Test
+    fun json() {
+        t38.jset("docs", "d1", "name.first", "Tom")
+        t38.jset("docs", "d1", "age", 37)
+        t38.jset("docs", "d1", "zip", "0123")
+        t38.jset("docs", "d1", "tags", "[1,2]", JsonValueMode.RAW)
+        t38.jset("docs", "d1", "flag", "true", JsonValueMode.STR)
+        assertEquals("""{"name":{"first":"Tom"},"age":37,"zip":"0123","tags":[1,2],"flag":"true"}""", t38.jget("docs", "d1"))
+        assertEquals("Tom", t38.jget("docs", "d1", "name.first"))
+        assertEquals("\"Tom\"", t38.jget("docs", "d1", "name.first", raw = true))
+        assertNull(t38.jget("docs", "d1", "nope"))
+        assertTrue(t38.jdel("docs", "d1", "tags.0"))
+        assertFalse(t38.jdel("docs", "d1", "tags.5"))
+        val feature = """{"type":"Feature","geometry":{"type":"Point","coordinates":[-115,33]},"properties":{"a":1}}"""
+        t38.execute("SET", "fleet", "f1", "OBJECT", feature)
+        assertTrue(t38.jdel("fleet", "f1", "properties.a"))
+        assertEquals("{}", t38.jget("fleet", "f1", "properties"))
+    }
+
+    @Test
     fun crud() {
         assertTrue(t38.ping())
         assertTrue(t38.set("fleet", "truck1").field("speed", 90).point(33.5123, -112.2693))

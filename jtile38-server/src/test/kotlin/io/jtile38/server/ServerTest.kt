@@ -206,6 +206,30 @@ class ServerTest {
     }
 
     @Test
+    fun jsonCommands() {
+        expect("OK", "JSET", "doc", "d1", "name.first", "Tom")
+        expect("OK", "JSET", "doc", "d1", "age", "037")
+        expect("OK", "JSET", "doc", "d1", "tags.-1", "1.5e3")
+        expect("OK", "JSET", "doc", "d1", "tags.-1", "true", "STR")
+        expect("""{"name":{"first":"Tom"},"age":"037","tags":[1.5e3,"true"]}""", "JGET", "doc", "d1")
+        expect("""["true",1.5e3]""", "JGET", "doc", "d1", "tags|@reverse")
+        expect("\"Tom\"", "JGET", "doc", "d1", "name.first", "RAW")
+        expect("""{"first":"Tom","age":"037"}""", "JGET", "doc", "d1", "{name.first,age}")
+        expect("1", "JDEL", "doc", "d1", "tags.0")
+        expect("0", "JDEL", "doc", "d1", "tags.5")
+        expect("0", "JDEL", "nokey", "d1", "a")
+        expect("<nil>", "JGET", "doc", "nope")
+        // spatial objects stay GeoJSON and are validated
+        expect("OK", "SET", "fleet", "t1", "POINT", 33, -115)
+        expect("OK", "JSET", "fleet", "t1", "coordinates.1", 44)
+        expect("""{"type":"Point","coordinates":[-115,44]}""", "JGET", "fleet", "t1")
+        val e = assertFailsWith<JedisDataException> { raw("JDEL", "fleet", "t1", "type") }
+        assertEquals("ERR missing type", e.message)
+        val e2 = assertFailsWith<JedisDataException> { raw("JSET", "doc", "d1", "tags.x", 1) }
+        assertEquals("ERR cannot set array element for non-numeric key 'x'", e2.message)
+    }
+
+    @Test
     fun timeouts() {
         for (i in 0 until 2000) raw("SET", "fleet", "t$i", "FIELD", "speed", i, "POINT", 33, -115)
         expect("2000", "TIMEOUT", 10, "SCAN", "fleet", "WHERE", "speed", 0, 9999, "COUNT")

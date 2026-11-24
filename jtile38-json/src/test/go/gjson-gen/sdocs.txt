@@ -1,0 +1,12 @@
+{"name":{"first":"Tom","last":"Anderson"},"age":37,"children":["Sara","Alex"],"friends":[{"first":"Dale","nets":["ig"]},{"first":"Roger","nets":[]}]}
+===
+{"type":"Point","coordinates":[1,2]}
+===
+[1,2,{"a":"b"}]
+===
+===
+  {  }  
+===
+[]
+===
+"str"
