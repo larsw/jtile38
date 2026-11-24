@@ -112,12 +112,22 @@ and `TreeSet`, goroutines → virtual threads, `sync.RWMutex` → `ReentrantRead
 Search areas: `POINT`, `CIRCLE`, `BOUNDS`, `HASH`, `QUADKEY`, `TILE`, `OBJECT`, `GET`, `SECTOR`, `A5`.
 `TEST` also combines areas with `AND`, `OR`, `NOT` and parentheses. Search
 options: `CURSOR`, `LIMIT`, `MATCH`, `WHERE` (range and comparison form, and expressions such as
-`WHERE "speed > 50 && properties.kind == 'truck'"`), `WHEREIN`, `NOFIELDS`, `DISTANCE`, `SPARSE`,
+`WHERE "speed > 50 && properties.kind == 'truck'"`), `WHEREIN`, `WHEREEVAL`/`WHEREEVALSHA` (Lua
+filters, see below), `NOFIELDS`, `DISTANCE`, `SPARSE`,
 `ASC`/`DESC`, `BUFFER meters` (grows the search area) and `CLIP` (`INTERSECTS` clips the returned
 objects to the area's bounding box). Outputs: `COUNT`, `IDS`, `OBJECTS`, `POINTS`, `BOUNDS`,
 `HASHES`, `A5`. After the area, `CLIPBY BOUNDS|HASH|TILE|QUADKEY ...` clips the area itself, and
 `TEST ... INTERSECTS CLIP <area>` returns the clipped object. Unlike Tile38, which crashes on it,
 `NEARBY ... BUFFER` returns an error.
+
+`WHEREEVAL script numargs arg...` filters with a Lua script that sees `ID`, `FIELDS`,
+`PROPERTIES` and `ARGV` and returns a truthy value; `WHEREEVALSHA sha1 ...` reuses a compiled
+script. Tile38 runs scripts on gopher-lua (Lua 5.1); jtile38 uses
+[LuaJ](https://github.com/luaj/luaj) (Lua 5.2 semantics) in the same restricted environment
+(`tonumber`, `tostring`, `table`, `string`, `math`, `os.clock`/`os.difftime`, `json`, `tile38`), and
+reports runtime errors with gopher-lua's wording. Syntax error messages differ unless the script
+ends unexpectedly, and numbers converted to strings by `..` or the string functions use LuaJ's
+formatting.
 
 [A5](https://a5geo.org) cells are equal-area pentagons at resolutions 0 to 30, with hexadecimal
 cell IDs: `GET ... A5 res` and the `A5 res` search output encode an object's center, `SET ... A5 id`
@@ -176,7 +186,7 @@ All Kotlin code is checked with ktlint during `mvn verify`. Run `mvn ktlint:form
 issues. See [CLAUDE.md](CLAUDE.md) for conventions.
 
 `scripts/run-upstream-tests.sh` runs Tile38's own integration test suite against jtile38 and fails
-on regressions; see [compat/upstream-tests](compat/upstream-tests/README.md). Currently 77 of its 86
+on regressions; see [compat/upstream-tests](compat/upstream-tests/README.md). Currently 78 of its 86
 sub-tests pass, and each remaining failure is tracked in an issue.
 
 More compatibility checks against the original Tile38 (build `tile38-server` and `tile38-cli`

@@ -159,7 +159,7 @@ internal object Fences {
             } else if (d.command != "fset") {
                 // The object is spatially outside the fence, so the WHERE clauses were not
                 // tested above. They must pass before trying cross detection.
-                if (!sw.fieldMatch(obj)) return emptyList()
+                if (!sw.fieldMatchOrFalse(obj)) return emptyList()
                 // The old and new objects may form a line that crosses the fence.
                 val old = d.old
                 if (!nocross && old != null) {
