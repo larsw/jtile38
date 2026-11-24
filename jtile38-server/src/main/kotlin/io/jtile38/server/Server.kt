@@ -23,12 +23,16 @@ import java.net.URLDecoder
 import java.util.TreeMap
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.locks.ReentrantLock
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import java.util.logging.Level
 import java.util.logging.Logger
 import kotlin.concurrent.read
+import kotlin.concurrent.withLock
 import kotlin.concurrent.write
 
 const val VERSION = "0.1.0-SNAPSHOT"
@@ -96,6 +100,39 @@ class Server(
     internal val aofSize = AtomicLong()
     internal val aofBuf = ByteArrayOutputStream()
 
+    /** Counter bumped when the follow target changes; a follow loop ends when it no longer matches. */
+    internal val followc = AtomicLong()
+
+    /** Follower caught-up flags ([BIT_CAUGHT_UP], [BIT_CAUGHT_UP_ONCE]). */
+    internal val fcupflags = AtomicInteger()
+
+    /** The follower's position in the leader's AOF. */
+    internal val faofsz = AtomicLong()
+
+    /** Live AOF streams to followers (Go `aofconnM`). Guarded by [lock]. */
+    internal val aofStreams = HashSet<AofStream>()
+
+    /** Bumped and signalled on every AOF flush, so live AOF streams can send the new data. */
+    internal val aofFlushes = AtomicLong()
+    private val aofFlushLock = ReentrantLock()
+    private val aofFlushCond = aofFlushLock.newCondition()
+
+    internal fun aofSignal() {
+        aofFlushLock.withLock {
+            aofFlushes.incrementAndGet()
+            aofFlushCond.signalAll()
+        }
+    }
+
+    /** Waits (up to a second) until the AOF was flushed after generation [gen]. */
+    internal fun awaitAofFlush(gen: Long) {
+        aofFlushLock.withLock {
+            if (aofFlushes.get() == gen && !stopped.get()) aofFlushCond.await(1, TimeUnit.SECONDS)
+        }
+    }
+
+    internal fun isStopped(): Boolean = stopped.get()
+
     /** True while AOFSHRINK runs; writes made meanwhile are also kept in [shrinkLog]. */
     @Volatile internal var shrinking = false
     internal var shrinkLog = ArrayList<List<String>>()
@@ -125,11 +162,15 @@ class Server(
         log.info("Ready to accept connections at ${options.host}:${ss.localPort}")
         Thread.ofVirtual().name("jtile38-accept").start { acceptLoop(ss) }
         Thread.ofVirtual().name("jtile38-expire").start { expireLoop() }
+        if (config.followHost != "") startFollowing(config.followHost, config.followPort.toInt(), followc.get())
         return this
     }
 
     override fun close() {
         if (!stopped.compareAndSet(false, true)) return
+        // this will force any follow communication to die
+        followc.incrementAndGet()
+        aofSignal()
         listener?.close()
         clients.values.forEach { runCatching { it.socket.close() } }
         executor.shutdownNow()
@@ -138,6 +179,7 @@ class Server(
             hookQueue.close()
             flushAof()
             aof?.close()
+            aofStreams.forEach { it.close() }
         }
     }
 
@@ -150,6 +192,12 @@ class Server(
         if (file.exists()) loadAof(file)
         aof = FileOutputStream(file, true)
         aofFile = file
+        aofSize.set(file.length())
+    }
+
+    /** Reloads the AOF after a follower truncated it; the caller holds the write lock. */
+    internal fun reloadAof(file: File) {
+        loadAof(file)
         aofSize.set(file.length())
     }
 
@@ -201,6 +249,8 @@ class Server(
         if (aofBuf.size() > 0) {
             aofBuf.writeTo(f)
             aofBuf.reset()
+            // wake up the live AOF streams of followers
+            aofSignal()
         }
     }
 
@@ -322,6 +372,7 @@ class Server(
                         is GoLive.Fence -> goLiveFence(live, msg, reader, output)
                         is GoLive.Subscribe -> goLiveSubscription(msg, reader, output)
                         is GoLive.Monitor -> goLiveMonitor(reader, output)
+                        is GoLive.Aof -> goLiveAof(live.pos, reader, output, sock)
                     }
                     return
                 }
@@ -579,6 +630,20 @@ class Server(
                 return
             }
         }
+        // leader, read-only and catch-up checks (Go's locking switch); after TIMEOUT, the inner command
+        if (msg.command in WRITE_COMMANDS) {
+            if (config.followHost != "") {
+                writeErr("not the leader")
+                return
+            }
+            if (config.readOnly) {
+                writeErr("read only")
+                return
+            }
+        } else if (msg.command in CATCH_UP_COMMANDS && config.followHost != "" && !caughtUpOnce()) {
+            writeErr("catching up to leader")
+            return
+        }
         try {
             val res = execute(msg)
             if (res is RespValue.Error) {
@@ -641,6 +706,26 @@ class Server(
             // system operations: no AOF, but the write lock
             "config", "client" -> {
                 lock.write { if (msg.command == "config") cmdConfig(msg) else cmdClient(msg) }
+            }
+
+            "readonly" -> {
+                lock.write { cmdReadOnly(msg) }
+            }
+
+            "replconf" -> {
+                lock.write { cmdReplConf(msg) }
+            }
+
+            "follow", "slaveof" -> {
+                cmdFollow(msg)
+            }
+
+            "aof" -> {
+                lock.read { cmdAof(msg) }
+            }
+
+            "aofmd5" -> {
+                lock.read { cmdAofMd5(msg) }
             }
 
             "subscribe", "psubscribe" -> {
@@ -710,7 +795,8 @@ class Server(
     /** Forwards a write to geofence hooks and live fences. Caller holds the write lock. */
     private fun notify(d: CommandDetails) {
         if (d.key == "") return
-        if (hookRegistry.hooks.isNotEmpty()) queueHooks(d)
+        // webhooks are sent by the leader only
+        if (config.followHost == "" && hookRegistry.hooks.isNotEmpty()) queueHooks(d)
         for (lf in lives) {
             if (lf.key == d.key) Fences.match(this, "", lf.sw, lf.spec, emptyList(), d).forEach { lf.queue.add(it) }
         }
@@ -853,6 +939,33 @@ class Server(
             """.trimIndent().replace("\n", " ") + "\r\n"
 
         private const val WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+
+        /** Reads that a follower refuses until it has caught up with its leader once. */
+        private val CATCH_UP_COMMANDS =
+            setOf(
+                "get",
+                "keys",
+                "scan",
+                "nearby",
+                "within",
+                "intersects",
+                "hooks",
+                "chans",
+                "search",
+                "ttl",
+                "bounds",
+                "server",
+                "info",
+                "type",
+                "jget",
+                "evalro",
+                "evalrosha",
+                "role",
+                "fget",
+                "exists",
+                "fexists",
+                "healthz",
+            )
 
         private val WRITE_COMMANDS =
             setOf(

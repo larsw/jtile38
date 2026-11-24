@@ -7,8 +7,8 @@ libraries work against it.
 
 It also includes a Kotlin/Java client library and `jtile38-cli`, a port of `tile38-cli`.
 
-Status: **MVP**. Core CRUD, search and geofencing commands work. Replication and scripting are not
-ported yet. See the [roadmap](#roadmap).
+Status: **MVP**. Core CRUD, search, geofencing and replication work. Scripting is not ported yet.
+See the [roadmap](#roadmap).
 
 ## Requirements
 
@@ -101,7 +101,7 @@ and `TreeSet`, goroutines → virtual threads, `sync.RWMutex` → `ReentrantRead
 ## Commands
 
 `PING`, `ECHO`, `QUIT`, `AUTH`, `OUTPUT`, `HEALTHZ`, `SERVER` (and `SERVER EXT`), `INFO`, `ROLE`, `STATS`,
-`CONFIG GET|SET|REWRITE`, `CLIENT LIST|GETNAME|SETNAME|KILL`, `TIMEOUT`, `AOFSHRINK`, `MONITOR`, `KEYS`, `SET` (`POINT`, `BOUNDS`,
+`CONFIG GET|SET|REWRITE`, `CLIENT LIST|GETNAME|SETNAME|KILL`, `TIMEOUT`, `AOFSHRINK`, `MONITOR`, `READONLY`, `FOLLOW`/`SLAVEOF`, `AOF`, `AOFMD5`, `REPLCONF`, `KEYS`, `SET` (`POINT`, `BOUNDS`,
 `HASH`, `A5`, `OBJECT`, `STRING`, `FIELD`, `EX`, `NX`/`XX`, `RETURN`), `GET` (`WITHFIELDS`,
 `OBJECT`/`POINT`/`BOUNDS`/`HASH`/`A5`), `DEL`, `PDEL`, `DROP`, `RENAME`, `RENAMENX`, `FLUSHDB`, `FSET`,
 `FGET`, `FEXISTS`, `JGET`, `JSET`, `JDEL`, `EXISTS`, `EXPIRE`, `PERSIST`, `TTL`, `TYPE`, `BOUNDS`, `SCAN`, `SEARCH`,
@@ -143,6 +143,14 @@ from Tile38 versions before 1.0 (`<dir>/aof`) is converted on startup, as Tile38
 `AOFSHRINK` rewrites it in the background to the minimal commands that recreate the current data
 and hooks; the result is byte-identical to Tile38's.
 
+Replication works like Tile38's leader/follower replication, and jtile38 and Tile38 can follow each
+other. `FOLLOW host port` (or `SLAVEOF`) makes a server a read-only follower that streams the
+leader's AOF (`CONFIG SET leaderauth` if the leader has a password); `FOLLOW no one` stops
+following. A restarted follower compares its AOF with the leader's by checksum (`AOFMD5`) and resumes
+where they diverge. Followers refuse writes with `not the leader` and reads with
+`catching up to leader` until they caught up once; `ROLE`, `INFO replication` and `SERVER` report the
+replication state. `READONLY yes|no` makes a server refuse writes.
+
 ## Roadmap
 
 The MVP (protocols, CRUD, search, AOF, expiry, client library and CLI) is done. The remaining work
@@ -166,7 +174,7 @@ All Kotlin code is checked with ktlint during `mvn verify`. Run `mvn ktlint:form
 issues. See [CLAUDE.md](CLAUDE.md) for conventions.
 
 `scripts/run-upstream-tests.sh` runs Tile38's own integration test suite against jtile38 and fails
-on regressions; see [compat/upstream-tests](compat/upstream-tests/README.md). Currently 72 of its 86
+on regressions; see [compat/upstream-tests](compat/upstream-tests/README.md). Currently 76 of its 86
 sub-tests pass, and each remaining failure is tracked in an issue.
 
 More compatibility checks against the original Tile38 (build `tile38-server` and `tile38-cli`

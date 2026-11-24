@@ -29,6 +29,11 @@ sealed class GoLive : Exception(null, null, false, false) {
 
     /** MONITOR. */
     object Monitor : GoLive()
+
+    /** AOF pos: a follower reading the AOF. */
+    class Aof(
+        val pos: Long,
+    ) : GoLive()
 }
 
 /** Reads commands from a live connection, starting with already buffered bytes. */

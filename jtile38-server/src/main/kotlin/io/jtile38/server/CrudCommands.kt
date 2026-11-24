@@ -747,29 +747,36 @@ internal fun Server.basicStats(): Map<String, Any> {
     val rt = Runtime.getRuntime()
     val points = cols.values.sumOf { it.pointCount() }
     val heap = rt.totalMemory() - rt.freeMemory()
-    return sortedMapOf(
-        "id" to serverId,
-        "http_transport" to true,
-        "pid" to ProcessHandle.current().pid(),
-        "aof_size" to aofSize(),
-        "num_collections" to cols.size,
-        "num_hooks" to hookRegistry.hooks.size,
-        "in_memory_size" to cols.values.sumOf { it.totalWeight() },
-        "num_points" to points,
-        "num_objects" to cols.values.sumOf { it.count() },
-        "num_strings" to cols.values.sumOf { it.stringCount() },
-        "mem_alloc" to heap,
-        "heap_size" to heap,
-        "heap_released" to 0,
-        "max_heap_size" to config.maxMemory,
-        "avg_item_size" to if (points != 0) heap / points else 0,
-        "version" to VERSION,
-        "pointer_size" to 8,
-        "read_only" to config.readOnly,
-        "cpus" to rt.availableProcessors(),
-        "threads" to Thread.activeCount(),
-        "pending_events" to hookQueue.size(),
-    )
+    val m =
+        sortedMapOf<String, Any>(
+            "id" to serverId,
+            "http_transport" to true,
+            "pid" to ProcessHandle.current().pid(),
+            "aof_size" to aofSize(),
+            "num_collections" to cols.size,
+            "num_hooks" to hookRegistry.hooks.size,
+            "in_memory_size" to cols.values.sumOf { it.totalWeight() },
+            "num_points" to points,
+            "num_objects" to cols.values.sumOf { it.count() },
+            "num_strings" to cols.values.sumOf { it.stringCount() },
+            "mem_alloc" to heap,
+            "heap_size" to heap,
+            "heap_released" to 0,
+            "max_heap_size" to config.maxMemory,
+            "avg_item_size" to if (points != 0) heap / points else 0,
+            "version" to VERSION,
+            "pointer_size" to 8,
+            "read_only" to config.readOnly,
+            "cpus" to rt.availableProcessors(),
+            "threads" to Thread.activeCount(),
+            "pending_events" to hookQueue.size(),
+        )
+    if (config.followHost != "") {
+        m["following"] = "${config.followHost}:${config.followPort}"
+        m["caught_up"] = caughtUp()
+        m["caught_up_once"] = caughtUpOnce()
+    }
+    return m
 }
 
 private fun jsonMap(m: Map<String, Any>): String =

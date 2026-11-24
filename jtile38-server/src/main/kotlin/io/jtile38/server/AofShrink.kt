@@ -146,6 +146,9 @@ internal fun Server.aofShrink() {
                 for (values in shrinkLog) buf.appendCommand(values)
                 buf.writeTo(f)
                 f.fd.sync()
+                // close the live AOF streams of followers; they reconnect and verify the new file
+                aofStreams.forEach { it.close() }
+                aofStreams.clear()
                 // anything below this point is unrecoverable: log and exit the process
                 try {
                     aof?.close()

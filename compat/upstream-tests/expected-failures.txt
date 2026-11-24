@@ -1,10 +1,6 @@
 # Upstream sub-tests that are expected to fail against jtile38, with the issue that will fix them.
 # scripts/run-upstream-tests.sh fails when a test outside this list fails (a regression) and
 # reports tests in this list that now pass, so they can be removed.
-aof/AOF                          # #28 replication (AOF streaming)
-aof/AOFMD5                       # #28 replication (AOFMD5)
-aof/READONLY                     # #29 READONLY
-follower/follow                  # #28 replication
 keys/WHEREEVAL                   # #31 WHEREEVAL
 metrics/basic                    # #32 Prometheus metrics
 scripts/ATOMIC                   # #30 Lua scripting
