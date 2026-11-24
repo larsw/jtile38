@@ -21,6 +21,11 @@ internal class ClientConn(
 
     /** Whether the connection has authenticated (AUTH or an HTTP Authorization header). */
     @Volatile var authd = false
+
+    /** Replication port and address announced by a follower with REPLCONF. */
+    @Volatile var replPort = 0
+
+    @Volatile var replAddr = ""
     val opened: Long = System.nanoTime()
 
     @Volatile var last: Long = System.nanoTime()
@@ -105,7 +110,7 @@ internal fun Server.extStats(): Map<String, Any> {
         "tile38_total_commands_processed" to statsTotalCommands.get(),
         "tile38_total_messages_sent" to statsMsgsSent.get(),
         "tile38_expired_keys" to statsExpired.get(),
-        "tile38_connected_slaves" to 0,
+        "tile38_connected_slaves" to aofStreams.size,
         "tile38_num_points" to points,
         "tile38_num_objects" to cols.values.sumOf { it.count() },
         "tile38_num_strings" to cols.values.sumOf { it.stringCount() },
@@ -219,7 +224,8 @@ internal fun Server.cmdInfo(msg: Message): RespValue {
             }
 
             "replication" -> {
-                w.append("# Replication\r\nrole:master\r\nconnected_slaves:0\r\n")
+                w.append("# Replication\r\n")
+                writeInfoReplication(w)
             }
 
             "cpu" -> {
@@ -252,15 +258,70 @@ internal fun Server.cmdInfo(msg: Message): RespValue {
 /** ROLE */
 internal fun Server.cmdRole(msg: Message): RespValue {
     val start = System.nanoTime()
-    val offset = aofSize()
+    if (config.followHost == "") {
+        val offset = aofSize()
+        val replicas = replicas()
+        if (msg.outputType == OutputType.JSON) {
+            val slaves =
+                replicas.joinToString(",", "[", "]") { (ip, port) ->
+                    "{\"ip\":${GoCompat.jsonString(ip)},\"port\":\"$port\",\"offset\":\"$offset\"}"
+                }
+            return RespValue.string(
+                "{\"ok\":true,\"role\":{\"role\":\"master\",\"offset\":$offset,\"slaves\":$slaves},\"elapsed\":" +
+                    "${GoCompat.jsonString(elapsed(start))}}",
+            )
+        }
+        val vals =
+            replicas.map { (ip, port) ->
+                RespValue.array(listOf(RespValue.string(ip), RespValue.string(port.toString()), RespValue.string(offset.toString())))
+            }
+        return RespValue.array(listOf(RespValue.string("master"), RespValue.integer(offset), RespValue.array(vals)))
+    }
+    val host = config.followHost
+    val port = config.followPort
+    val offset = faofsz.get()
     if (msg.outputType == OutputType.JSON) {
         return RespValue.string(
-            "{\"ok\":true,\"role\":{\"role\":\"master\",\"offset\":$offset,\"slaves\":[]},\"elapsed\":${GoCompat.jsonString(
-                elapsed(start),
-            )}}",
+            "{\"ok\":true,\"role\":{\"role\":\"slave\",\"host\":${GoCompat.jsonString(host)},\"port\":$port," +
+                "\"state\":\"connected\",\"offset\":$offset},\"elapsed\":${GoCompat.jsonString(elapsed(start))}}",
         )
     }
-    return RespValue.array(listOf(RespValue.string("master"), RespValue.integer(offset), RespValue.array(emptyList())))
+    return RespValue.array(
+        listOf(
+            RespValue.string("slave"),
+            RespValue.string(host),
+            RespValue.integer(port),
+            RespValue.string("connected"),
+            RespValue.integer(offset),
+        ),
+    )
+}
+
+/** The (ip, port) of every connection that announced itself as a follower with REPLCONF (Go `replicaIPAndPort`). */
+internal fun Server.replicas(): List<Pair<String, Int>> =
+    clients.values.sortedBy { it.id }.filter { it.replPort != 0 }.map { cc ->
+        var ip = if (cc.replAddr != "") cc.replAddr else cc.remoteAddr
+        val i = ip.lastIndexOf(':')
+        if (i != -1) {
+            ip = ip.substring(0, i)
+            if (ip == "[::1]") ip = "localhost"
+        }
+        ip to cc.replPort
+    }
+
+/** The replication section of INFO (Go `writeInfoReplication`). */
+private fun Server.writeInfoReplication(w: StringBuilder) {
+    if (config.followHost != "") {
+        w.append("role:slave\r\n")
+        w.append("master_host:${config.followHost}\r\n")
+        w.append("master_port:${config.followPort}\r\n")
+        w.append("slave_repl_offset:${faofsz.get()}\r\n")
+        if (config.replicaPriority >= 0) w.append("slave_priority:${config.replicaPriority}\r\n")
+    } else {
+        w.append("role:master\r\n")
+        for ((i, r) in replicas().withIndex()) w.append("slave$i:ip=${r.first},port=${r.second},state=online\r\n")
+    }
+    w.append("connected_slaves:${aofStreams.size}\r\n")
 }
 
 /** CLIENT LIST | KILL | GETNAME | SETNAME */
