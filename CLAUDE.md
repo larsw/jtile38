@@ -5,7 +5,7 @@ JVM (Kotlin) port of [Tile38](https://github.com/tidwall/tile38). MIT licensed.
 ## Build
 
 - JDK 25, Kotlin 2.4.x, Maven 3.9+. Multi-module build from the repo root: `mvn install`.
-- Modules: `jtile38-json`, `jtile38-geojson`, `jtile38-rtree`, `jtile38-resp`, `jtile38-server`,
+- Modules: `jtile38-json`, `jtile38-geojson`, `jtile38-rtree`, `jtile38-resp`, `jtile38-expr`, `jtile38-server`,
   `jtile38-client` (client library), `jtile38-cli` (port of `tile38-cli`).
 
 ## Code style: ktlint is mandatory

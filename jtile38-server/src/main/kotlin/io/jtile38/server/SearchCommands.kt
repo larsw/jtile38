@@ -111,7 +111,10 @@ private fun parseBaseTokens(
             "where" -> {
                 t.next()
                 if (detectExprToken(listOfRemaining(t), 0)) {
-                    throw CommandException("WHERE expressions are not supported yet")
+                    // WHERE expr
+                    val expr = t.next() ?: throw Errors.invalidNumberOfArguments()
+                    a.wheres.add(WhereFilter.expr(expr))
+                    continue
                 }
                 val name = t.next() ?: throw Errors.invalidNumberOfArguments()
                 var smin = (t.next() ?: throw Errors.invalidNumberOfArguments()).lowercase()

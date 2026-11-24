@@ -7,7 +7,6 @@ aof/AOFSHRINK                    # #8 AOFSHRINK, #40 MASSINSERT
 aof/READONLY                     # #29 READONLY
 aof/migrate                      # #41 legacy AOF migration
 follower/follow                  # #28 replication, #9 CONFIG, #10 requirepass
-keys/FIELDS                      # #3 WHERE expressions
 keys/WHEREEVAL                   # #31 WHEREEVAL
 metrics/basic                    # #32 Prometheus metrics
 monitor/monitor                  # #39 MONITOR
