@@ -5,6 +5,7 @@
 package io.jtile38.server
 
 import io.jtile38.geojson.Circle
+import io.jtile38.geojson.Clip
 import io.jtile38.geojson.GeoObject
 import io.jtile38.geojson.GeoPoint
 import io.jtile38.geojson.GeoRect
@@ -307,9 +308,13 @@ internal fun Server.cmdTest(msg: Message): RespValue {
     if (doClip && (area1.obj == null || area2.obj == null)) throw Errors.invalidArgument("clip")
     if (vs.remaining() != 0) throw Errors.invalidNumberOfArguments()
     val result = if (lTest == "within") area1.withinExpr(area2) else area1.intersectsExpr(area2)
-    if (result && doClip) throw CommandException("CLIP is not supported yet")
+    val clipped = if (result && doClip) Clip.clip(area1.obj!!, area2.obj!!) else null
     if (msg.outputType == OutputType.JSON) {
-        return RespValue.string("{\"ok\":true,\"result\":$result,\"elapsed\":\"${elapsed(start)}\"}")
+        val sb = StringBuilder("{\"ok\":true,\"result\":").append(result)
+        if (clipped != null) sb.append(",\"object\":").append(clipped.json())
+        sb.append(",\"elapsed\":\"").append(elapsed(start)).append("\"}")
+        return RespValue.string(sb.toString())
     }
+    if (clipped != null) return RespValue.array(listOf(RespValue.integer(1), RespValue.string(clipped.json())))
     return RespValue.integer(if (result) 1 else 0)
 }

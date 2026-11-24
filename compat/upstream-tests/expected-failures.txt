@@ -15,10 +15,6 @@ scripts/NONATOMIC                # #30 Lua scripting
 scripts/READONLY                 # #30 Lua scripting
 scripts/VULN                     # #30 Lua scripting
 search/A5                        # #7 A5 cells
-search/BUFFER                    # #5 BUFFER
-search/INTERSECTS_CLIPBY         # #4 CLIPBY
-search/WITHIN_CLIPBY             # #4 CLIPBY
-testcmd/INTERSECTS_CLIP          # #4 CLIP
 timeouts/no writes within scripts # #30 Lua scripting
 timeouts/scripts # #30 Lua scripting
 timeouts/within scripts # #30 Lua scripting

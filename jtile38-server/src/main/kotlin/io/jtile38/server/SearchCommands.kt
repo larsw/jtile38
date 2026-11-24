@@ -3,7 +3,10 @@
 
 package io.jtile38.server
 
+import io.jtile38.geojson.Buffer
+import io.jtile38.geojson.BufferException
 import io.jtile38.geojson.Circle
+import io.jtile38.geojson.Clip
 import io.jtile38.geojson.GeoObject
 import io.jtile38.geojson.GeoPoint
 import io.jtile38.geojson.GeoRect
@@ -30,6 +33,7 @@ internal class SearchArgs {
     var desc = false
     var clip = false
     var hasBuffer = false
+    var buffer = 0.0
     var obj: GeoObject? = null
     var detect: Set<String>? = null
     var accept: Set<String>? = null
@@ -99,6 +103,7 @@ private fun parseBaseTokens(
                 val sbuf = t.required()
                 val buf = GoCompat.parseFloat(sbuf)
                 if (buf == null || buf < 0 || buf.isInfinite() || buf.isNaN()) throw Errors.invalidArgument(sbuf)
+                a.buffer = buf
                 a.hasBuffer = true
             }
 
@@ -472,13 +477,32 @@ internal fun Server.searchArgs(
             a.roam = RoamSpec(key, id, Glob.isGlob(id), meters, scan)
         }
     }
-    if (t.hasNext()) {
+    while (t.hasNext()) {
         val tok = t.required()
         if (tok.lowercase() != "clipby") throw Errors.invalidNumberOfArguments()
-        throw CommandException("CLIPBY is not supported yet")
+        val ltok = t.required().lowercase()
+        when (ltok) {
+            "bounds", "hash", "tile", "quadkey" -> {
+                val clipRect = parseRectArea(ltok, t)
+                // ROAM has no area; like Go, clipping nothing yields nothing
+                a.obj = a.obj?.let { Clip.clip(it, clipRect) }
+            }
+
+            else -> {
+                throw Errors.invalidArgument("cannot clipby $ltok")
+            }
+        }
     }
-    if (a.clip) throw CommandException("CLIP is not supported yet")
-    if (a.hasBuffer) throw CommandException("BUFFER is not supported yet")
+    if (a.hasBuffer) {
+        a.obj =
+            try {
+                Buffer.simple(a.obj ?: throw CommandException("cannot buffer nil object"), a.buffer)
+            } catch (e: BufferException) {
+                throw CommandException(e.message ?: "invalid buffer")
+            }
+        // Tile38 crashes the whole server here: NEARBY expects its area to stay a circle
+        if (cmd == "nearby" && a.obj !is Circle) throw CommandException("cannot buffer a NEARBY search")
+    }
     return a
 }
 
@@ -663,7 +687,9 @@ internal fun Server.cmdWithinOrIntersects(
     if (msg.outputType == OutputType.JSON) out.append("{\"ok\":true")
     val col = sw.col
     if (col != null) {
-        val iter: (Item) -> Boolean = { sw.pushObject(ScanParams(it)) }
+        // only INTERSECTS clips its results
+        val clipBy = if (cmd == "intersects" && a.clip) a.obj else null
+        val iter: (Item) -> Boolean = { sw.pushObject(ScanParams(it, clip = clipBy)) }
         if (cmd == "within") col.within(a.obj!!, a.sparse, sw, iter) else col.intersects(a.obj!!, a.sparse, sw, iter)
     }
     return finish(msg, sw, out, start)

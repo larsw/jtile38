@@ -261,6 +261,51 @@ class ServerTest {
     }
 
     @Test
+    fun clipAndBuffer() {
+        val poly = """{"type":"Polygon","coordinates":[[[-113,33],[-112,33],[-112,34],[-113,34],[-113,33]]]}"""
+        expect("OK", "SET", "g", "poly", "OBJECT", poly)
+        expect("OK", "SET", "g", "pt", "POINT", 33.5, -112.5)
+        expect(
+            """[0 [[poly {"type":"Polygon","coordinates":[[[-112.9,33.7],[-112.9,33.3],[-112.3,33.3],[-112.3,33.7],""" +
+                """[-112.9,33.7],[-112.9,33.3],[-112.9,33.7]]]}]]]""",
+            "INTERSECTS",
+            "g",
+            "MATCH",
+            "poly",
+            "CLIP",
+            "BOUNDS",
+            33.3,
+            -112.9,
+            33.7,
+            -112.3,
+        )
+        expect("[0 [poly]]", "INTERSECTS", "g", "IDS", "BOUNDS", 33, -114, 35, -110, "CLIPBY", "BOUNDS", 33.9, -112.1, 34, -112)
+        expect("[0 []]", "INTERSECTS", "g", "IDS", "POINT", 33.5, -111.99)
+        expect("[0 [poly]]", "INTERSECTS", "g", "BUFFER", 2000, "IDS", "POINT", 33.5, -111.99)
+        expect(
+            """[1 {"type":"Polygon","coordinates":[[[-112.5,33.5],[-112,33.5],[-112,34],[-112.5,34],[-112.5,33.5]]]}]""",
+            "TEST",
+            "OBJECT",
+            poly,
+            "INTERSECTS",
+            "CLIP",
+            "BOUNDS",
+            33.5,
+            -112.5,
+            35,
+            -111,
+        )
+        val e =
+            assertFailsWith<JedisDataException> { raw("INTERSECTS", "g", "IDS", "BOUNDS", 33, -114, 35, -110, "CLIPBY", "CIRCLE", 1, 1, 1) }
+        assertEquals("ERR invalid argument 'cannot clipby circle'", e.message)
+        // Tile38 itself crashes on NEARBY ... BUFFER, so this is only checked against jtile38
+        if (System.getenv("TILE38_EXTERNAL_PORT") == null) {
+            val e2 = assertFailsWith<JedisDataException> { raw("NEARBY", "g", "BUFFER", 100, "IDS", "POINT", 33.5, -112.5) }
+            assertEquals("ERR cannot buffer a NEARBY search", e2.message)
+        }
+    }
+
+    @Test
     fun timeouts() {
         for (i in 0 until 2000) raw("SET", "fleet", "t$i", "FIELD", "speed", i, "POINT", 33, -115)
         expect("2000", "TIMEOUT", 10, "SCAN", "fleet", "WHERE", "speed", 0, 9999, "COUNT")

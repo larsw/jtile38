@@ -82,7 +82,7 @@ Searches are built as options, then an area, then an output (`asIds`, `asObjects
 | Module | Ports | Contents |
 |---|---|---|
 | `jtile38-json` | `tidwall/gjson`, `tidwall/sjson`, `tidwall/pretty`, `tidwall/match` | JSON validation, path queries (full gjson syntax), JSON editing, formatting, Go-compatible number and string formatting |
-| `jtile38-geojson` | `tidwall/geojson` | GeoJSON objects, planar geometry, geodesic helpers |
+| `jtile38-geojson` | `tidwall/geojson`, `tile38/internal/{clip,buffer}` | GeoJSON objects, planar geometry, geodesic helpers, clipping and buffering |
 | `jtile38-rtree` | `tidwall/rtree` | 2D R-tree with float32 coordinates and kNN search |
 | `jtile38-resp` | `tidwall/redcon`, `tidwall/resp` | RESP, native and telnet command reader; RESP values |
 | `jtile38-expr` | `tidwall/expr`, `tidwall/conv` | JavaScript-like expression evaluator for `WHERE` expressions |
@@ -106,7 +106,11 @@ Search areas: `POINT`, `CIRCLE`, `BOUNDS`, `HASH`, `QUADKEY`, `TILE`, `OBJECT`, 
 `TEST` also combines areas with `AND`, `OR`, `NOT` and parentheses. Search
 options: `CURSOR`, `LIMIT`, `MATCH`, `WHERE` (range and comparison form, and expressions such as
 `WHERE "speed > 50 && properties.kind == 'truck'"`), `WHEREIN`, `NOFIELDS`, `DISTANCE`, `SPARSE`,
-`ASC`/`DESC`. Outputs: `COUNT`, `IDS`, `OBJECTS`, `POINTS`, `BOUNDS`, `HASHES`.
+`ASC`/`DESC`, `BUFFER meters` (grows the search area) and `CLIP` (`INTERSECTS` clips the returned
+objects to the area's bounding box). Outputs: `COUNT`, `IDS`, `OBJECTS`, `POINTS`, `BOUNDS`,
+`HASHES`. After the area, `CLIPBY BOUNDS|HASH|TILE|QUADKEY ...` clips the area itself, and
+`TEST ... INTERSECTS CLIP <area>` returns the clipped object. Unlike Tile38, which crashes on it,
+`NEARBY ... BUFFER` returns an error.
 
 `JGET`, `JSET` and `JDEL` edit an object's JSON document by path, with the full
 [gjson](https://github.com/tidwall/gjson/blob/master/SYNTAX.md) path syntax for `JGET`
@@ -150,7 +154,7 @@ All Kotlin code is checked with ktlint during `mvn verify`. Run `mvn ktlint:form
 issues. See [CLAUDE.md](CLAUDE.md) for conventions.
 
 `scripts/run-upstream-tests.sh` runs Tile38's own integration test suite against jtile38 and fails
-on regressions; see [compat/upstream-tests](compat/upstream-tests/README.md). Currently 65 of its 86
+on regressions; see [compat/upstream-tests](compat/upstream-tests/README.md). Currently 69 of its 86
 sub-tests pass, and each remaining failure is tracked in an issue.
 
 More compatibility checks against the original Tile38 (build `tile38-server` and `tile38-cli`

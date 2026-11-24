@@ -3,6 +3,7 @@
 
 package io.jtile38.server
 
+import io.jtile38.geojson.Clip
 import io.jtile38.geojson.Feature
 import io.jtile38.geojson.GeoObject
 import io.jtile38.geojson.GeoPoint
@@ -66,6 +67,8 @@ class ScanParams(
     val dist: Double = 0.0,
     val distOutput: Boolean = false,
     val noTest: Boolean = false,
+    /** When set, the object is clipped to this object's rectangle before it is written (INTERSECTS ... CLIP). */
+    val clip: GeoObject? = null,
 )
 
 fun extractZCoordinate(o: GeoObject): Double {
@@ -268,13 +271,20 @@ class ScanWriter(
     }
 
     /** Returns false when iteration should stop. */
-    fun pushObject(opts: ScanParams): Boolean {
+    fun pushObject(opts0: ScanParams): Boolean {
+        var opts = opts0
         if (!opts.noTest) {
             if (!globMatch(opts.obj)) return true
             if (!fieldMatch(opts.obj)) return true
         }
         count++
         if (output == SearchOutput.COUNT) return count < limit
+        val clip = opts.clip
+        if (clip != null) {
+            // create a newly clipped object
+            val o = opts.obj
+            opts = ScanParams(Item(o.id, Clip.clip(o.geo, clip), o.expires, o.fields), opts.dist, opts.distOutput, opts.noTest)
+        }
         if (!fullFields) opts.obj.fields.forEach { fkeys.add(it.name) }
         filled.add(opts)
         numberItems++
