@@ -14,14 +14,22 @@ enum class SearchOutput { UNKNOWN, IDS, OBJECTS, COUNT, POINTS, HASHES, BOUNDS }
 
 const val LIMIT_ITEMS = 100L
 
-/** A WHERE filter, either `name min max` or `name op value`. */
+/** A WHERE filter: `name min max`, `name op value`, or an expression (then [name] holds the expression). */
 class WhereFilter(
     val name: String,
     val minx: Boolean,
     val min: FieldValue,
     val maxx: Boolean,
     val max: FieldValue,
+    val expr: Boolean = false,
 ) {
+    companion object {
+        fun expr(expression: String) = WhereFilter(expression, false, FieldValue.ZERO, false, FieldValue.ZERO, expr = true)
+    }
+
+    /** Go `whereT.matchExpr`. */
+    fun matchExpr(o: Item): Boolean = ExprWhere.match(name, o)
+
     fun matchField(value: FieldValue): Boolean {
         when (min.data) {
             "<" -> return value.less(max)
@@ -212,7 +220,13 @@ class ScanWriter(
     }
 
     internal fun fieldMatch(o: Item): Boolean {
-        for (w in wheres) if (!w.matchField(getFieldValue(o, w.name))) return false
+        for (w in wheres) {
+            if (w.expr) {
+                if (!w.matchExpr(o)) return false
+            } else if (!w.matchField(getFieldValue(o, w.name))) {
+                return false
+            }
+        }
         for (w in whereins) if (!w.match(getFieldValue(o, w.name))) return false
         return true
     }

@@ -7,7 +7,7 @@ licenses below.
 
 ---------------------------------------------------------------------------
 
-Tile38, geojson, rtree, gjson, pretty, match, redcon, resp
+Tile38, geojson, rtree, gjson, pretty, match, redcon, resp, expr, conv
 https://github.com/tidwall
 Copyright (c) Joshua J Baker
 Licensed under the MIT License.

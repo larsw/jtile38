@@ -25,6 +25,7 @@
     <module>jtile38-geojson</module>
     <module>jtile38-rtree</module>
     <module>jtile38-resp</module>
+    <module>jtile38-expr</module>
     <module>jtile38-server</module>
     <module>jtile38-client</module>
     <module>jtile38-cli</module>
@@ -63,6 +64,11 @@
       <dependency>
         <groupId>io.jtile38</groupId>
         <artifactId>jtile38-resp</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.jtile38</groupId>
+        <artifactId>jtile38-expr</artifactId>
         <version>${project.version}</version>
       </dependency>
       <dependency>

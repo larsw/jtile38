@@ -175,6 +175,37 @@ class ServerTest {
     }
 
     @Test
+    fun whereExpressions() {
+        expect("OK", "SET", "fleet", "truck1", "FIELD", "speed", 90, "FIELD", "weight", 1000, "POINT", 33.5, -112.2)
+        expect("OK", "SET", "fleet", "truck2", "FIELD", "speed", 45, "POINT", 33.6, -112.3)
+        expect("OK", "SET", "fleet", "car1", "FIELD", "speed", 120, "FIELD", "name", "Bob", "POINT", 33.7, -112.1)
+        expect(
+            "OK",
+            "SET",
+            "fleet",
+            "f1",
+            "OBJECT",
+            "{\"type\":\"Feature\",\"geometry\":{\"type\":\"Point\",\"coordinates\":[-112.2,33.55]}," +
+                "\"properties\":{\"kind\":\"truck\",\"color\":\"Red\",\"nested\":{\"x\":1.5}}}",
+        )
+        expect("OK", "SET", "fleet", "rect", "BOUNDS", 33.4, -112.3, 33.5, -112.2)
+        expect("[0 [car1 truck1]]", "SCAN", "fleet", "WHERE", "speed > 50", "IDS")
+        expect("[0 [truck1]]", "SCAN", "fleet", "WHERE", "speed > 50 && weight > 500", "IDS")
+        expect("[0 [car1 truck2]]", "SCAN", "fleet", "WHERE", "speed < 50 && speed != 0 || name == 'bob'", "IDS")
+        expect("[0 [truck1 truck2]]", "SCAN", "fleet", "WHERE", "id =~ '^truck'", "IDS")
+        expect("[0 [truck1 truck2]]", "SCAN", "fleet", "WHERE", "id.match('TRUCK*')", "IDS")
+        expect("[0 [f1]]", "SCAN", "fleet", "WHERE", "properties.color == 'red' && properties.nested.x > 1", "IDS")
+        expect("[0 [rect]]", "SCAN", "fleet", "WHERE", "type == 'Polygon'", "IDS")
+        expect("[0 [f1 rect]]", "SCAN", "fleet", "WHERE", "nonexistent == 0 && !speed", "IDS")
+        // invalid expressions and regexes match nothing
+        expect("[0 []]", "SCAN", "fleet", "WHERE", "speed >", "IDS")
+        expect("[0 []]", "SCAN", "fleet", "WHERE", "id =~ '['", "IDS")
+        // combined with the range form and other searches
+        expect("[0 [truck1]]", "SCAN", "fleet", "WHERE", "speed > 50", "WHERE", "speed", 0, 100, "IDS")
+        expect("2", "WITHIN", "fleet", "WHERE", "speed > 50", "COUNT", "BOUNDS", 33, -113, 34, -112)
+    }
+
+    @Test
     fun nearbyWithinIntersects() {
         expect("OK", "SET", "fleet", "t1", "POINT", 33.0, -112.0)
         expect("OK", "SET", "fleet", "t2", "POINT", 33.1, -112.0)

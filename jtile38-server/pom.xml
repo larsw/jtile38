@@ -34,6 +34,10 @@
       <artifactId>jtile38-resp</artifactId>
     </dependency>
     <dependency>
+      <groupId>io.jtile38</groupId>
+      <artifactId>jtile38-expr</artifactId>
+    </dependency>
+    <dependency>
       <groupId>redis.clients</groupId>
       <artifactId>jedis</artifactId>
       <scope>test</scope>

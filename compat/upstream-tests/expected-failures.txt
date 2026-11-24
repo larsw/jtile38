@@ -10,7 +10,6 @@ follower/follow                  # #28 replication, #9 CONFIG, #10 requirepass
 json/basic                       # #2 JSET/JGET/JDEL
 json/geojson                     # #2 JSET/JGET/JDEL
 json/number                      # #2 JSET/JGET/JDEL
-keys/FIELDS                      # #3 WHERE expressions
 keys/WHEREEVAL                   # #31 WHEREEVAL
 metrics/basic                    # #32 Prometheus metrics
 monitor/monitor                  # #39 MONITOR

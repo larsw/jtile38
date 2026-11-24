@@ -219,10 +219,55 @@ class FieldList private constructor(
         return FieldList(copy.toTypedArray())
     }
 
+    /**
+     * Returns the field named [name], or the zero field. A dotted name `field.path` also looks up
+     * `path` inside a JSON field named `field` (Go `List.Get` in field/list_binary.go).
+     */
     fun get(name: String): Field {
-        val (index, found) = bsearch(name)
-        return if (found) entries[index] else Field.ZERO
+        val dot = name.indexOf('.')
+        if (dot == -1) {
+            val (index, found) = bsearch(name)
+            return if (found) entries[index] else Field.ZERO
+        }
+        val jname = name.substring(0, dot)
+        val jpath = name.substring(dot + 1)
+        for (f in entries) {
+            if (f.value.kind == FieldKind.JSON) {
+                if (jname < f.name) break
+                if (f.name == jname) {
+                    val res = Gjson.get(f.value.data, jpath)
+                    if (res.exists()) return bfield(name, kindOf(res.type), res.string())
+                }
+            } else {
+                if (name < f.name) break
+                if (f.name == name) return f
+            }
+        }
+        return Field.ZERO
     }
+
+    private fun kindOf(t: JsonType): FieldKind =
+        when (t) {
+            JsonType.NULL -> FieldKind.NULL
+            JsonType.FALSE -> FieldKind.FALSE
+            JsonType.NUMBER -> FieldKind.NUMBER
+            JsonType.STRING -> FieldKind.STRING
+            JsonType.TRUE -> FieldKind.TRUE
+            JsonType.JSON -> FieldKind.JSON
+        }
+
+    private fun bfield(
+        name: String,
+        kind: FieldKind,
+        data: String,
+    ): Field =
+        when (kind) {
+            FieldKind.NUMBER -> Field(name, FieldValue(kind, data, GoCompat.parseFloat(data) ?: 0.0))
+            FieldKind.NULL -> Field(name, FieldValue(kind, "null", 0.0))
+            FieldKind.FALSE -> Field(name, FieldValue(kind, "false", 0.0))
+            FieldKind.TRUE -> Field(name, FieldValue(kind, "true", 0.0))
+            else -> Field(name, FieldValue(kind, data, 0.0))
+        }
 
     fun forEach(iter: (Field) -> Unit) = entries.forEach(iter)
 

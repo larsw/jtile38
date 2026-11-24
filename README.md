@@ -77,6 +77,7 @@ Searches are built as options, then an area, then an output (`asIds`, `asObjects
 | `jtile38-geojson` | `tidwall/geojson` | GeoJSON objects, planar geometry, geodesic helpers |
 | `jtile38-rtree` | `tidwall/rtree` | 2D R-tree with float32 coordinates and kNN search |
 | `jtile38-resp` | `tidwall/redcon`, `tidwall/resp` | RESP, native and telnet command reader; RESP values |
+| `jtile38-expr` | `tidwall/expr`, `tidwall/conv` | Javascript-like expression evaluator for `WHERE` expressions |
 | `jtile38-server` | `tile38/internal/{server,collection,field,object,glob,bing}`, `mmcloughlin/geohash` | The server |
 | `jtile38-client` | | Client library (Kotlin and Java) |
 | `jtile38-cli` | `tile38/cmd/tile38-cli`, `core/commands.json` | Command line interface (JLine for line editing) |
@@ -95,9 +96,9 @@ and `TreeSet`, goroutines → virtual threads, `sync.RWMutex` → `ReentrantRead
 
 Search areas: `POINT`, `CIRCLE`, `BOUNDS`, `HASH`, `QUADKEY`, `TILE`, `OBJECT`, `GET`, `SECTOR`.
 `TEST` also combines areas with `AND`, `OR`, `NOT` and parentheses. Search
-options: `CURSOR`, `LIMIT`, `MATCH`, `WHERE` (range and comparison form), `WHEREIN`, `NOFIELDS`,
-`DISTANCE`, `SPARSE`, `ASC`/`DESC`. Outputs: `COUNT`, `IDS`, `OBJECTS`, `POINTS`, `BOUNDS`,
-`HASHES`.
+options: `CURSOR`, `LIMIT`, `MATCH`, `WHERE` (range and comparison form, and expressions such as
+`WHERE "speed > 50 && properties.kind == 'truck'"`), `WHEREIN`, `NOFIELDS`, `DISTANCE`, `SPARSE`,
+`ASC`/`DESC`. Outputs: `COUNT`, `IDS`, `OBJECTS`, `POINTS`, `BOUNDS`, `HASHES`.
 
 Geofencing: live fences (`NEARBY`/`WITHIN`/`INTERSECTS ... FENCE` with `DETECT`, `COMMANDS`,
 `NODWELL` and `ROAM key pattern meters [SCAN pattern]`), channels (`SETCHAN`, `DELCHAN`,
@@ -133,7 +134,7 @@ All Kotlin code is checked with ktlint during `mvn verify`. Run `mvn ktlint:form
 issues. See [CLAUDE.md](CLAUDE.md) for conventions.
 
 `scripts/run-upstream-tests.sh` runs Tile38's own integration test suite against jtile38 and fails
-on regressions; see [compat/upstream-tests](compat/upstream-tests/README.md). Currently 60 of its 86
+on regressions; see [compat/upstream-tests](compat/upstream-tests/README.md). Currently 61 of its 86
 sub-tests pass, and each remaining failure is tracked in an issue.
 
 More compatibility checks against the original Tile38 (build `tile38-server` and `tile38-cli`
