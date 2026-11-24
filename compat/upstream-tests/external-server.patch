@@ -18,7 +18,7 @@ index e93e990..1acabf1 100644
  	closed   bool
  	port     int
  	mport    int
-@@ -109,6 +111,43 @@ func mockOpenServer(opts MockServerOptions) (*mockServer, error) {
+@@ -109,6 +111,47 @@ func mockOpenServer(opts MockServerOptions) (*mockServer, error) {
  		s.mport = getNextPort()
  	}
  	var ferr atomic.Pointer[error] // ferr for when the server fails to start
@@ -51,6 +51,10 @@ index e93e990..1acabf1 100644
 +				}
 +			}
 +			err := errors.New(msg)
++			if msg == io.ErrUnexpectedEOF.Error() {
++				// the in-process server returns this sentinel error
++				err = io.ErrUnexpectedEOF
++			}
 +			ferr.CompareAndSwap(nil, &err)
 +		}()
 +		if err := s.waitForStartup(&ferr); err != nil {
@@ -62,7 +66,7 @@ index e93e990..1acabf1 100644
  	go func() {
  		sopts := server.Options{
  			Host:              "localhost",
-@@ -172,7 +211,11 @@ func (mc *mockServer) Close() {
+@@ -172,7 +215,11 @@ func (mc *mockServer) Close() {
  		return
  	}
  	mc.closed = true

@@ -26,6 +26,9 @@ sealed class GoLive : Exception(null, null, false, false) {
 
     /** SUBSCRIBE or PSUBSCRIBE. */
     object Subscribe : GoLive()
+
+    /** MONITOR. */
+    object Monitor : GoLive()
 }
 
 /** Reads commands from a live connection, starting with already buffered bytes. */
@@ -64,7 +67,7 @@ internal class LiveReader(
     }
 }
 
-/** Writes a live message like Go `writeLiveMessage`. */
+/** Writes a live message like Go `writeLiveMessage`; WebSocket connections get a text frame. */
 internal fun writeLiveMessage(
     out: OutputStream,
     message: String,
@@ -74,14 +77,40 @@ internal fun writeLiveMessage(
     if (message.isEmpty()) return
     val data =
         when (connType) {
-            ConnType.RESP -> if (wrapResp) "$" + message.length + "\r\n" + message + "\r\n" else message
-            ConnType.NATIVE -> "$" + message.length + " " + message + "\r\n"
+            ConnType.WEBSOCKET -> webSocketFrame(message)
+            ConnType.RESP -> (if (wrapResp) "$" + message.length + "\r\n" + message + "\r\n" else message).toByteArray(Charsets.ISO_8859_1)
+            ConnType.NATIVE -> ("$" + message.length + " " + message + "\r\n").toByteArray(Charsets.ISO_8859_1)
             else -> return
         }
     synchronized(out) {
-        out.write(data.toByteArray(Charsets.ISO_8859_1))
+        out.write(data)
         out.flush()
     }
+}
+
+/** Encodes [data] (a byte string) as one unmasked WebSocket text frame (Go `WriteWebSocketMessage`). */
+internal fun webSocketFrame(data: String): ByteArray {
+    val payload = data.toByteArray(Charsets.ISO_8859_1)
+    val n = payload.size
+    val head =
+        when {
+            n <= 125 -> {
+                byteArrayOf(129.toByte(), n.toByte())
+            }
+
+            n <= 0xFFFF -> {
+                byteArrayOf(129.toByte(), 126, (n shr 8).toByte(), n.toByte())
+            }
+
+            else -> {
+                ByteArray(10).also { h ->
+                    h[0] = 129.toByte()
+                    h[1] = 127
+                    for (k in 0 until 8) h[9 - k] = (n.toLong() shr (8 * k)).toByte()
+                }
+            }
+        }
+    return head + payload
 }
 
 /**

@@ -2,7 +2,7 @@
 
 A JVM port of [Tile38](https://github.com/tidwall/tile38), the in-memory geospatial database and
 geofencing server, written in Kotlin. jtile38 speaks the same protocols as Tile38 (RESP, the
-Tile38 native protocol, telnet and HTTP, all on one port), so existing Tile38 and Redis client
+Tile38 native protocol, telnet, HTTP and WebSockets, all on one port), so existing Tile38 and Redis client
 libraries work against it.
 
 It also includes a Kotlin/Java client library and `jtile38-cli`, a port of `tile38-cli`.
@@ -42,6 +42,10 @@ java -jar jtile38-cli/target/jtile38-cli.jar --resp nearby fleet point 33.5 -112
 redis-cli -p 9851 GET fleet truck1
 curl 'localhost:9851/get+fleet+truck1'
 ```
+
+Over HTTP and WebSockets the command is the URL path. A WebSocket connection gets the reply as a
+text frame; for a live geofence or a subscription it then streams the events, for example
+`ws://localhost:9851/nearby+fleet+fence+point+33.5+-112.2+5000`.
 
 `jtile38-cli` takes the same options and environment variables as `tile38-cli`: `-h`, `-p`,
 `--resp`, `--json`, `--raw`, `--noprompt`, `-x` (read the last argument from stdin),
@@ -97,7 +101,7 @@ and `TreeSet`, goroutines → virtual threads, `sync.RWMutex` → `ReentrantRead
 ## Commands
 
 `PING`, `ECHO`, `QUIT`, `AUTH`, `OUTPUT`, `HEALTHZ`, `SERVER` (and `SERVER EXT`), `INFO`, `ROLE`, `STATS`,
-`CONFIG GET|SET|REWRITE`, `CLIENT LIST|GETNAME|SETNAME|KILL`, `TIMEOUT`, `AOFSHRINK`, `KEYS`, `SET` (`POINT`, `BOUNDS`,
+`CONFIG GET|SET|REWRITE`, `CLIENT LIST|GETNAME|SETNAME|KILL`, `TIMEOUT`, `AOFSHRINK`, `MONITOR`, `KEYS`, `SET` (`POINT`, `BOUNDS`,
 `HASH`, `A5`, `OBJECT`, `STRING`, `FIELD`, `EX`, `NX`/`XX`, `RETURN`), `GET` (`WITHFIELDS`,
 `OBJECT`/`POINT`/`BOUNDS`/`HASH`/`A5`), `DEL`, `PDEL`, `DROP`, `RENAME`, `RENAMENX`, `FLUSHDB`, `FSET`,
 `FGET`, `FEXISTS`, `JGET`, `JSET`, `JDEL`, `EXISTS`, `EXPIRE`, `PERSIST`, `TTL`, `TYPE`, `BOUNDS`, `SCAN`, `SEARCH`,
@@ -134,7 +138,8 @@ messages are retried for 30 seconds and survive restarts: like Tile38, they are 
 `<dir>/queue.db`, which uses the same file format, so a data directory can be moved between Tile38
 and jtile38.
 
-Data persists in an append-only file (`<dir>/appendonly.aof`) in the same format as Tile38.
+Data persists in an append-only file (`<dir>/appendonly.aof`) in the same format as Tile38. An AOF
+from Tile38 versions before 1.0 (`<dir>/aof`) is converted on startup, as Tile38 does.
 `AOFSHRINK` rewrites it in the background to the minimal commands that recreate the current data
 and hooks; the result is byte-identical to Tile38's.
 
@@ -161,7 +166,7 @@ All Kotlin code is checked with ktlint during `mvn verify`. Run `mvn ktlint:form
 issues. See [CLAUDE.md](CLAUDE.md) for conventions.
 
 `scripts/run-upstream-tests.sh` runs Tile38's own integration test suite against jtile38 and fails
-on regressions; see [compat/upstream-tests](compat/upstream-tests/README.md). Currently 70 of its 86
+on regressions; see [compat/upstream-tests](compat/upstream-tests/README.md). Currently 72 of its 86
 sub-tests pass, and each remaining failure is tracked in an issue.
 
 More compatibility checks against the original Tile38 (build `tile38-server` and `tile38-cli`

@@ -86,6 +86,9 @@ class Server(
     internal val pubsub = PubSub()
     internal val endpointManager = EndpointManager { channel, message -> pubsub.publish(channel, message) }
     internal val lives: MutableSet<LiveFence> = ConcurrentHashMap.newKeySet()
+
+    /** Output streams of MONITOR connections. */
+    internal val monitors: MutableSet<OutputStream> = ConcurrentHashMap.newKeySet()
     internal val statsMsgsSent = AtomicLong()
 
     internal var aof: FileOutputStream? = null
@@ -114,6 +117,7 @@ class Server(
     fun start(): Server {
         // like upstream, the hook queue is loaded before the AOF re-creates the hooks
         hookQueue.open()
+        migrateLegacyAof(File(options.dir))
         if (options.appendOnly) openAof()
         // like Tile38, an empty host listens on all interfaces
         val ss = ServerSocket(options.port, 1024, if (options.host == "") null else InetAddress.getByName(options.host))
@@ -294,7 +298,7 @@ class Server(
                     protoErr = e
                     break
                 }
-                if (msg.connType != ConnType.HTTP) {
+                if (msg.connType != ConnType.HTTP && msg.connType != ConnType.WEBSOCKET) {
                     val forced = client.outputType ?: defaultOutputType()
                     if (forced != null) msg.outputType = forced
                 }
@@ -317,12 +321,13 @@ class Server(
                     when (live) {
                         is GoLive.Fence -> goLiveFence(live, msg, reader, output)
                         is GoLive.Subscribe -> goLiveSubscription(msg, reader, output)
+                        is GoLive.Monitor -> goLiveMonitor(reader, output)
                     }
                     return
                 }
-                if (msg.connType != ConnType.HTTP) client.outputType = msg.outputType
+                if (msg.connType != ConnType.HTTP && msg.connType != ConnType.WEBSOCKET) client.outputType = msg.outputType
                 lastOutput = msg.outputType
-                if (msg.connType == ConnType.HTTP) {
+                if (msg.connType == ConnType.HTTP || msg.connType == ConnType.WEBSOCKET) {
                     close = true
                     break
                 }
@@ -411,6 +416,9 @@ class Server(
             }
         var auth = ""
         var contentLength = 0
+        var websocket = false
+        var websocketVersion = 0
+        var websocketKey = ""
         for (h in headers.drop(1)) {
             val i = h.indexOf(':')
             if (i < 0) continue
@@ -419,8 +427,31 @@ class Server(
             when (name) {
                 "authorization" -> auth = value
                 "content-length" -> contentLength = value.toIntOrNull() ?: throw ProtocolException("invalid HTTP request")
-                "upgrade" -> if (value.lowercase() == "websocket") throw ProtocolException("websockets are not supported yet")
+                "upgrade" -> if (value.lowercase() == "websocket") websocket = true
+                "sec-websocket-version" -> websocketVersion = value.toIntOrNull() ?: throw ProtocolException("invalid HTTP request")
+                "sec-websocket-key" -> websocketKey = value
             }
+        }
+        if (websocket && websocketVersion >= 13 && websocketKey != "") {
+            // WebSocket: the command is in the path; replies and live messages are sent as frames
+            val sum =
+                java.security.MessageDigest
+                    .getInstance("SHA-1")
+                    .digest((websocketKey + WS_GUID).toByteArray(Charsets.ISO_8859_1))
+            val accept =
+                java.util.Base64
+                    .getEncoder()
+                    .encodeToString(sum)
+            out.writeBytes(
+                "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: $accept\r\n\r\n"
+                    .toByteArray(Charsets.ISO_8859_1),
+            )
+            val args = CommandReader.splitNativeLine(path)
+            // like Tile38, an upgrade without a command is answered with the handshake only
+            if (args.isEmpty()) return null to bodyStart
+            val msg = Message(args, ConnType.WEBSOCKET, OutputType.JSON)
+            msg.auth = auth
+            return msg to bodyStart
         }
         if (contentLength > 0) {
             if (len - bodyStart < contentLength) return null to 0
@@ -457,7 +488,11 @@ class Server(
                     out.writeLatin1("$" + res.length + " " + res + "\r\n")
                 }
 
-                ConnType.HTTP, ConnType.WEBSOCKET -> {
+                ConnType.WEBSOCKET -> {
+                    out.writeBytes(webSocketFrame(res))
+                }
+
+                ConnType.HTTP -> {
                     out.writeLatin1(
                         "HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Type: application/json; charset=utf-8\r\n" +
                             "Content-Length: ${res.length + 2}\r\nAccess-Control-Allow-Origin: *\r\n\r\n",
@@ -562,15 +597,31 @@ class Server(
 
     /** Runs a command under the appropriate lock and returns its response, honoring a TIMEOUT deadline. */
     internal fun execute(msg: Message): RespValue {
-        val dl = msg.deadline ?: return executeCommand(msg)
+        val dl = msg.deadline ?: return monitored(msg)
         if (msg.command in WRITE_COMMANDS) throw CommandException("timeout not supported for '${msg.command}'")
         try {
-            val res = executeCommand(msg)
+            val res = monitored(msg)
             dl.check()
             return res
         } catch (_: DeadlineExceeded) {
             throw CommandException("timeout")
         }
+    }
+
+    /** Runs a command and reports it to MONITOR clients, like the end of Go's `command`. */
+    private fun monitored(msg: Message): RespValue {
+        val res =
+            try {
+                executeCommand(msg)
+            } catch (e: CommandException) {
+                sendMonitor(e.message ?: "", msg)
+                throw e
+            } catch (e: GoLive) {
+                sendMonitor("going live", msg)
+                throw e
+            }
+        sendMonitor(if (res is RespValue.Error) res.message else null, msg)
+        return res
     }
 
     private fun executeCommand(msg: Message): RespValue =
@@ -608,6 +659,10 @@ class Server(
                     "sleep" -> lock.read { cmdSleep(msg) }
                     else -> cmdShutdown()
                 }
+            }
+
+            "monitor" -> {
+                cmdMonitor(msg)
             }
 
             "flushall" -> {
@@ -796,6 +851,8 @@ class Server(
             password. NOTE: You only need to do one of the above things in order for the
             server to start accepting connections from the outside.
             """.trimIndent().replace("\n", " ") + "\r\n"
+
+        private const val WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 
         private val WRITE_COMMANDS =
             setOf(
