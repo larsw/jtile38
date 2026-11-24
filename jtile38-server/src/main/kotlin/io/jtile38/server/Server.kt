@@ -39,6 +39,8 @@ class ServerOptions(
     val appendOnly: Boolean = true,
     /** Overrides the default output type for all connections ("resp" or "json"). */
     val clientOutput: String? = null,
+    /** Developer mode: enables MASSINSERT, SLEEP and SHUTDOWN (tile38-server --dev). */
+    val devMode: Boolean = false,
 )
 
 /** Current time in Unix nanoseconds. */
@@ -79,9 +81,14 @@ class Server(
     internal val lives: MutableSet<LiveFence> = ConcurrentHashMap.newKeySet()
     internal val statsMsgsSent = AtomicLong()
 
-    private var aof: FileOutputStream? = null
-    private val aofSize = AtomicLong()
-    private val aofBuf = ByteArrayOutputStream()
+    internal var aof: FileOutputStream? = null
+    internal var aofFile: File? = null
+    internal val aofSize = AtomicLong()
+    internal val aofBuf = ByteArrayOutputStream()
+
+    /** True while AOFSHRINK runs; writes made meanwhile are also kept in [shrinkLog]. */
+    @Volatile internal var shrinking = false
+    internal var shrinkLog = ArrayList<List<String>>()
 
     private val stopped = AtomicBoolean(false)
     private var listener: ServerSocket? = null
@@ -130,6 +137,7 @@ class Server(
         val file = File(dir, "appendonly.aof")
         if (file.exists()) loadAof(file)
         aof = FileOutputStream(file, true)
+        aofFile = file
         aofSize.set(file.length())
     }
 
@@ -163,18 +171,20 @@ class Server(
         log.info("AOF loaded $count commands")
     }
 
-    private fun writeAof(
+    internal fun writeAof(
         args: List<String>,
         d: CommandDetails,
     ) {
-        if (!d.updated || aof == null) return
+        if (!d.updated) return
+        if (shrinking) shrinkLog.add(args.toList())
+        if (aof == null) return
         val v = RespValue.array(args.map { RespValue.string(it) })
         val n = aofBuf.size()
         v.writeTo(aofBuf)
         aofSize.addAndGet((aofBuf.size() - n).toLong())
     }
 
-    private fun flushAof() {
+    internal fun flushAof() {
         val f = aof ?: return
         if (aofBuf.size() > 0) {
             aofBuf.writeTo(f)
@@ -536,6 +546,19 @@ class Server(
                 throw GoLive.Subscribe
             }
 
+            "aofshrink" -> {
+                cmdAofShrink(msg)
+            }
+
+            "massinsert", "sleep", "shutdown" -> {
+                if (!options.devMode) throw CommandException("unknown command '${msg.args[0]}'")
+                when (msg.command) {
+                    "massinsert" -> cmdMassInsert(msg)
+                    "sleep" -> lock.read { cmdSleep(msg) }
+                    else -> cmdShutdown()
+                }
+            }
+
             "flushall" -> {
                 throw CommandException("unknown command '${msg.args[0]}'")
             }
@@ -549,7 +572,7 @@ class Server(
      * Runs a write command; the caller must hold the write lock. Unless replaying the AOF, the
      * write is appended to the AOF and forwarded to hooks and live fences.
      */
-    private fun executeWrite(
+    internal fun executeWrite(
         msg: Message,
         replay: Boolean = false,
     ): WriteResult {

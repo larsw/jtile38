@@ -24,12 +24,12 @@ index e93e990..1acabf1 100644
  	var ferr atomic.Pointer[error] // ferr for when the server fails to start
 +	if ext := os.Getenv("TILE38_EXTERNAL_SERVER"); ext != "" {
 +		// Run the tests against an external server binary (e.g. jtile38) that
-+		// accepts the tile38-server flags -h, -p and -d.
++		// accepts the tile38-server flags -h, -p, -d and --dev.
 +		if err := os.MkdirAll(dir, 0777); err != nil {
 +			return nil, err
 +		}
 +		args := strings.Fields(ext)
-+		args = append(args, "-h", "127.0.0.1", "-p", fmt.Sprint(port), "-d", dir)
++		args = append(args, "-h", "127.0.0.1", "-p", fmt.Sprint(port), "-d", dir, "--dev")
 +		s.proc = exec.Command(args[0], args[1:]...)
 +		// A server that fails to start prints "error: <message>" on stderr
 +		// and exits; report that message like the in-process server does.

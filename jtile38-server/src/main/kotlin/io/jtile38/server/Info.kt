@@ -93,7 +93,7 @@ internal fun Server.extStats(): Map<String, Any> {
         "tile38_connected_clients" to clients.size,
         "tile38_cluster_enabled" to false,
         "tile38_aof_enabled" to options.appendOnly,
-        "tile38_aof_rewrite_in_progress" to false,
+        "tile38_aof_rewrite_in_progress" to shrinking,
         "tile38_aof_last_rewrite_time_sec" to 0,
         "tile38_aof_current_rewrite_time_sec" to 0,
         "tile38_aof_size" to aofSize(),
@@ -202,7 +202,7 @@ internal fun Server.cmdInfo(msg: Message): RespValue {
             "persistence" -> {
                 w.append("# Persistence\r\n")
                 w.append("aof_enabled:${if (options.appendOnly) 1 else 0}\r\n")
-                w.append("aof_rewrite_in_progress:0\r\n")
+                w.append("aof_rewrite_in_progress:${if (shrinking) 1 else 0}\r\n")
                 w.append("aof_last_rewrite_time_sec:0\r\n")
                 w.append("aof_current_rewrite_time_sec:0\r\n")
             }

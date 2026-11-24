@@ -3,7 +3,6 @@
 # reports tests in this list that now pass, so they can be removed.
 aof/AOF                          # #28 replication (AOF streaming)
 aof/AOFMD5                       # #28 replication (AOFMD5)
-aof/AOFSHRINK                    # #8 AOFSHRINK, #40 MASSINSERT
 aof/READONLY                     # #29 READONLY
 aof/migrate                      # #41 legacy AOF migration
 follower/follow                  # #28 replication, #9 CONFIG, #10 requirepass

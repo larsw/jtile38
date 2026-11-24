@@ -23,7 +23,8 @@ java -jar jtile38-server/target/jtile38-server.jar -p 9851
 ```
 
 Server options: `-h host` (default `127.0.0.1`), `-p port` (default `9851`), `-d dir` (data
-directory, default `data`), `--appendonly yes|no`, `-o resp|json` (default output for all clients).
+directory, default `data`), `--appendonly yes|no`, `-o resp|json` (default output for all clients),
+`--dev` (developer mode: enables `MASSINSERT`, `SLEEP` and `SHUTDOWN`).
 
 Try it with `jtile38-cli`, the original `tile38-cli`, `redis-cli` or plain HTTP:
 
@@ -88,7 +89,7 @@ and `TreeSet`, goroutines → virtual threads, `sync.RWMutex` → `ReentrantRead
 ## Commands
 
 `PING`, `ECHO`, `QUIT`, `OUTPUT`, `HEALTHZ`, `SERVER` (and `SERVER EXT`), `INFO`, `ROLE`, `STATS`,
-`CONFIG GET|SET|REWRITE`, `CLIENT LIST|GETNAME|SETNAME|KILL`, `TIMEOUT`, `KEYS`, `SET` (`POINT`, `BOUNDS`,
+`CONFIG GET|SET|REWRITE`, `CLIENT LIST|GETNAME|SETNAME|KILL`, `TIMEOUT`, `AOFSHRINK`, `KEYS`, `SET` (`POINT`, `BOUNDS`,
 `HASH`, `OBJECT`, `STRING`, `FIELD`, `EX`, `NX`/`XX`, `RETURN`), `GET` (`WITHFIELDS`,
 `OBJECT`/`POINT`/`BOUNDS`/`HASH`), `DEL`, `PDEL`, `DROP`, `RENAME`, `RENAMENX`, `FLUSHDB`, `FSET`,
 `FGET`, `FEXISTS`, `JGET`, `JSET`, `JDEL`, `EXISTS`, `EXPIRE`, `PERSIST`, `TTL`, `TYPE`, `BOUNDS`, `SCAN`, `SEARCH`,
@@ -116,6 +117,8 @@ messages are retried for 30 seconds and survive restarts: like Tile38, they are 
 and jtile38.
 
 Data persists in an append-only file (`<dir>/appendonly.aof`) in the same format as Tile38.
+`AOFSHRINK` rewrites it in the background to the minimal commands that recreate the current data
+and hooks; the result is byte-identical to Tile38's.
 
 ## Roadmap
 
@@ -140,7 +143,7 @@ All Kotlin code is checked with ktlint during `mvn verify`. Run `mvn ktlint:form
 issues. See [CLAUDE.md](CLAUDE.md) for conventions.
 
 `scripts/run-upstream-tests.sh` runs Tile38's own integration test suite against jtile38 and fails
-on regressions; see [compat/upstream-tests](compat/upstream-tests/README.md). Currently 64 of its 86
+on regressions; see [compat/upstream-tests](compat/upstream-tests/README.md). Currently 65 of its 86
 sub-tests pass, and each remaining failure is tracked in an issue.
 
 More compatibility checks against the original Tile38 (build `tile38-server` and `tile38-cli`
