@@ -7,8 +7,8 @@ libraries work against it.
 
 It also includes a Kotlin/Java client library and `jtile38-cli`, a port of `tile38-cli`.
 
-Status: **MVP**. Core CRUD, search and geofencing commands work. Geofencing, replication and scripting
-are not ported yet. See the [roadmap](#roadmap).
+Status: **MVP**. Core CRUD, search and geofencing commands work. Replication and scripting are not
+ported yet. See the [roadmap](#roadmap).
 
 ## Requirements
 
@@ -84,15 +84,17 @@ Searches are built as options, then an area, then an output (`asIds`, `asObjects
 Go dependencies with a good JVM equivalent are not ported: `tidwall/btree` → `java.util.TreeMap`
 and `TreeSet`, goroutines → virtual threads, `sync.RWMutex` → `ReentrantReadWriteLock`.
 
-## Commands in the MVP
+## Commands
 
-`PING`, `ECHO`, `QUIT`, `OUTPUT`, `HEALTHZ`, `SERVER`, `STATS`, `KEYS`, `SET` (`POINT`, `BOUNDS`,
+`PING`, `ECHO`, `QUIT`, `OUTPUT`, `HEALTHZ`, `SERVER` (and `SERVER EXT`), `INFO`, `ROLE`, `STATS`,
+`CONFIG GET|SET|REWRITE`, `CLIENT LIST|GETNAME|SETNAME|KILL`, `TIMEOUT`, `KEYS`, `SET` (`POINT`, `BOUNDS`,
 `HASH`, `OBJECT`, `STRING`, `FIELD`, `EX`, `NX`/`XX`, `RETURN`), `GET` (`WITHFIELDS`,
 `OBJECT`/`POINT`/`BOUNDS`/`HASH`), `DEL`, `PDEL`, `DROP`, `RENAME`, `RENAMENX`, `FLUSHDB`, `FSET`,
 `FGET`, `FEXISTS`, `EXISTS`, `EXPIRE`, `PERSIST`, `TTL`, `TYPE`, `BOUNDS`, `SCAN`, `SEARCH`,
-`NEARBY`, `WITHIN`, `INTERSECTS`.
+`NEARBY`, `WITHIN`, `INTERSECTS`, `TEST`.
 
-Search areas: `POINT`, `CIRCLE`, `BOUNDS`, `HASH`, `QUADKEY`, `TILE`, `OBJECT`, `GET`. Search
+Search areas: `POINT`, `CIRCLE`, `BOUNDS`, `HASH`, `QUADKEY`, `TILE`, `OBJECT`, `GET`, `SECTOR`.
+`TEST` also combines areas with `AND`, `OR`, `NOT` and parentheses. Search
 options: `CURSOR`, `LIMIT`, `MATCH`, `WHERE` (range and comparison form), `WHEREIN`, `NOFIELDS`,
 `DISTANCE`, `SPARSE`, `ASC`/`DESC`. Outputs: `COUNT`, `IDS`, `OBJECTS`, `POINTS`, `BOUNDS`,
 `HASHES`.
