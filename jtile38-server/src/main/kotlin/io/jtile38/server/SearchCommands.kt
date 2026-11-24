@@ -27,6 +27,7 @@ internal class SearchArgs {
     val globs = ArrayList<String>()
     val wheres = ArrayList<WhereFilter>()
     val whereins = ArrayList<WhereInFilter>()
+    val whereevals = ArrayList<WhereEval>()
     var nofields = false
     var limit = 0L
     var sparse = 0
@@ -42,6 +43,11 @@ internal class SearchArgs {
 
     /** The geofence described by these arguments. */
     fun fenceSpec(cmd: String) = FenceSpec(cmd, key, obj, globs, distance, detect, accept, nodwell, roam)
+
+    /** Returns the Lua interpreters of WHEREEVAL filters to the pool. */
+    fun close() {
+        whereevals.forEach { it.close() }
+    }
 }
 
 /** A simple cursor over an argument list (Go `tokenval`). */
@@ -81,7 +87,7 @@ private fun detectExprToken(
     return false
 }
 
-private fun parseBaseTokens(
+private fun Server.parseBaseTokens(
     cmd: String,
     t: Tokens,
     a: SearchArgs,
@@ -155,7 +161,8 @@ private fun parseBaseTokens(
             }
 
             "whereeval", "whereevalsha" -> {
-                throw CommandException("WHEREEVAL is not supported yet")
+                t.next()
+                WhereEval.parse(luaScripts, wtok.lowercase() == "whereevalsha", { t.next() }, a.whereevals)
             }
 
             "nofields" -> {
@@ -394,14 +401,31 @@ private fun parseRectArea(
 internal val NEARBY_TYPES = setOf("point")
 internal val WITHIN_OR_INTERSECTS_TYPES = setOf("bounds", "hash", "tile", "quadkey", "get", "object", "circle", "point", "sector", "a5")
 
+/** Parses search arguments; the Lua interpreters of WHEREEVAL filters are released on errors. */
 internal fun Server.searchArgs(
     cmd: String,
     vs: List<String>,
     types: Set<String>,
     fromFence: Boolean = false,
 ): SearchArgs {
-    val t = Tokens(vs)
     val a = SearchArgs()
+    try {
+        searchArgsInto(a, cmd, vs, types, fromFence)
+    } catch (e: Throwable) {
+        a.close()
+        throw e
+    }
+    return a
+}
+
+private fun Server.searchArgsInto(
+    a: SearchArgs,
+    cmd: String,
+    vs: List<String>,
+    types: Set<String>,
+    fromFence: Boolean,
+) {
+    val t = Tokens(vs)
     parseBaseTokens(cmd, t, a, fromFence)
     var typ = t.required()
     if (a.output == SearchOutput.BOUNDS && (cmd == "within" || cmd == "intersects")) {
@@ -523,7 +547,6 @@ internal fun Server.searchArgs(
         // Tile38 crashes the whole server here: NEARBY expects its area to stay a circle
         if (cmd == "nearby" && a.obj !is Circle) throw CommandException("cannot buffer a NEARBY search")
     }
-    return a
 }
 
 private fun Server.newScanWriter(
@@ -544,6 +567,7 @@ private fun Server.newScanWriter(
     a.wheres,
     a.whereins,
     a.nofields,
+    a.whereevals,
 )
 
 /** A scan writer that renders geofence messages (always JSON). */
@@ -565,6 +589,7 @@ internal fun Server.fenceScanWriter(
         a.wheres,
         a.whereins,
         a.nofields,
+        a.whereevals,
     )
 }
 
@@ -614,14 +639,28 @@ internal fun Server.cmdScan(msg: Message): RespValue {
     val start = System.nanoTime()
     val t = Tokens(msg.args.subList(1, msg.args.size))
     val a = SearchArgs()
-    parseBaseTokens("scan", t, a)
-    if (t.hasNext()) throw Errors.invalidNumberOfArguments()
+    try {
+        parseBaseTokens("scan", t, a)
+        if (t.hasNext()) throw Errors.invalidNumberOfArguments()
+        return scan(msg, a, start)
+    } finally {
+        a.close()
+    }
+}
+
+private fun Server.scan(
+    msg: Message,
+    a: SearchArgs,
+    start: Long,
+): RespValue {
     val out = StringBuilder()
     val sw = newScanWriter(out, msg, a, false)
     if (msg.outputType == OutputType.JSON) out.append("{\"ok\":true")
     val col = sw.col
     if (col != null) {
-        if (sw.output == SearchOutput.COUNT && sw.wheres.isEmpty() && sw.whereins.isEmpty() && sw.globEverything) {
+        if (sw.output == SearchOutput.COUNT && sw.wheres.isEmpty() && sw.whereins.isEmpty() && sw.whereevals.isEmpty() &&
+            sw.globEverything
+        ) {
             sw.count = maxOf(col.count() - a.cursor, 0L)
         } else {
             val limits = multiGlobParse(sw.globs, a.desc)
@@ -641,8 +680,20 @@ internal fun Server.cmdSearch(msg: Message): RespValue {
     val start = System.nanoTime()
     val t = Tokens(msg.args.subList(1, msg.args.size))
     val a = SearchArgs()
-    parseBaseTokens("search", t, a)
-    if (t.hasNext()) throw Errors.invalidNumberOfArguments()
+    try {
+        parseBaseTokens("search", t, a)
+        if (t.hasNext()) throw Errors.invalidNumberOfArguments()
+        return search(msg, a, start)
+    } finally {
+        a.close()
+    }
+}
+
+private fun Server.search(
+    msg: Message,
+    a: SearchArgs,
+    start: Long,
+): RespValue {
     val out = StringBuilder()
     val sw = newScanWriter(out, msg, a, true)
     if (msg.outputType == OutputType.JSON) out.append("{\"ok\":true")
@@ -667,7 +718,20 @@ internal fun Server.cmdSearch(msg: Message): RespValue {
 internal fun Server.cmdNearby(msg: Message): RespValue {
     val start = System.nanoTime()
     val a = searchArgs("nearby", msg.args.subList(1, msg.args.size), NEARBY_TYPES)
+    // a live fence keeps its WHEREEVAL interpreters
     if (a.fence) throw GoLive.Fence(a.fenceSpec("nearby"), fenceScanWriter(msg, a))
+    try {
+        return nearby(msg, a, start)
+    } finally {
+        a.close()
+    }
+}
+
+private fun Server.nearby(
+    msg: Message,
+    a: SearchArgs,
+    start: Long,
+): RespValue {
     val out = StringBuilder()
     val sw = newScanWriter(out, msg, a, false)
     if (msg.outputType == OutputType.JSON) out.append("{\"ok\":true")
@@ -701,7 +765,21 @@ internal fun Server.cmdWithinOrIntersects(
 ): RespValue {
     val start = System.nanoTime()
     val a = searchArgs(cmd, msg.args.subList(1, msg.args.size), WITHIN_OR_INTERSECTS_TYPES)
+    // a live fence keeps its WHEREEVAL interpreters
     if (a.fence) throw GoLive.Fence(a.fenceSpec(cmd), fenceScanWriter(msg, a))
+    try {
+        return withinOrIntersects(cmd, msg, a, start)
+    } finally {
+        a.close()
+    }
+}
+
+private fun Server.withinOrIntersects(
+    cmd: String,
+    msg: Message,
+    a: SearchArgs,
+    start: Long,
+): RespValue {
     val out = StringBuilder()
     val sw = newScanWriter(out, msg, a, false)
     if (msg.outputType == OutputType.JSON) out.append("{\"ok\":true")

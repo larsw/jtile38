@@ -136,7 +136,7 @@ fun getFieldValue(
 }
 
 /** Collects and serializes the results of SCAN, SEARCH, NEARBY, WITHIN and INTERSECTS. */
-class ScanWriter(
+class ScanWriter internal constructor(
     private val out: StringBuilder,
     private val msg: Message,
     val col: Collection?,
@@ -149,6 +149,7 @@ class ScanWriter(
     val wheres: List<WhereFilter>,
     val whereins: List<WhereInFilter>,
     internal val nofields: Boolean,
+    internal val whereevals: List<WhereEval> = emptyList(),
 ) : Cursor {
     private val limit: Long = if (limitIn == 0L) (if (output == SearchOutput.COUNT) Long.MAX_VALUE else LIMIT_ITEMS) else limitIn
     private val fkeys = TreeSet<String>()
@@ -231,8 +232,20 @@ class ScanWriter(
             }
         }
         for (w in whereins) if (!w.match(getFieldValue(o, w.name))) return false
+        if (whereevals.isNotEmpty()) {
+            val (fields, props) = WhereEval.fieldsOf(o)
+            for (w in whereevals) if (!w.match(fields, o.id, props)) return false
+        }
         return true
     }
+
+    /** [fieldMatch] for geofences: like Tile38, a failing WHEREEVAL script is no match. */
+    internal fun fieldMatchOrFalse(o: Item): Boolean =
+        try {
+            fieldMatch(o)
+        } catch (_: CommandException) {
+            false
+        }
 
     private fun globMatch(o: Item): Boolean {
         if (globEverything) return true
@@ -241,7 +254,7 @@ class ScanWriter(
     }
 
     /** Glob and field test, as done for every search candidate. */
-    internal fun testObject(o: Item): Boolean = globMatch(o) && fieldMatch(o)
+    internal fun testObject(o: Item): Boolean = globMatch(o) && fieldMatchOrFalse(o)
 
     /** Pushes and immediately writes a single object (geofence messages). */
     internal fun writeObject(opts: ScanParams) {

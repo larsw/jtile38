@@ -175,6 +175,51 @@ class ServerTest {
     }
 
     @Test
+    fun whereEval() {
+        expect("OK", "SET", "k", "a1", "FIELD", "a", 1, "FIELD", "name", "\"bob\"", "POINT", 33, -115)
+        expect("OK", "SET", "k", "a2", "FIELD", "a", 2, "POINT", 34, -115, 7)
+        expect(
+            "OK",
+            "SET",
+            "k",
+            "f1",
+            "OBJECT",
+            """{"type":"Feature","geometry":{"type":"Point","coordinates":[-115,35]},"properties":{"color":"red","nested":{"x":[1,2]}}}""",
+        )
+        val b = arrayOf<Any>("BOUNDS", 30, -120, 40, -110)
+        expect("[0 [a2 a1]]", "WITHIN", "k", "WHEREEVAL", "return FIELDS.a ~= nil and FIELDS.a >= tonumber(ARGV[1])", 1, 1, "IDS", *b)
+        expect("[0 [a1]]", "WITHIN", "k", "WHEREEVAL", "return FIELDS.name == ARGV[1] and ID == 'a1'", 1, "bob", "IDS", *b)
+        expect("[0 [a2]]", "WITHIN", "k", "WHEREEVAL", "return FIELDS.z ~= nil and FIELDS.z > 0", 0, "IDS", *b)
+        expect("[0 [f1]]", "WITHIN", "k", "WHEREEVAL", "return PROPERTIES.nested.x[2] == 2", 0, "IDS", *b)
+        // indexing a non-table is no match; tables, strings and numbers are truthy when non-empty
+        expect("[0 []]", "WITHIN", "k", "WHEREEVAL", "return FIELDS.nope.x", 0, "IDS", *b)
+        expect("[0 [f1 a2 a1]]", "WITHIN", "k", "WHEREEVAL", "return {a=1}", 0, "IDS", *b)
+        expect("[0 []]", "WITHIN", "k", "WHEREEVAL", "return ''", 0, "IDS", *b)
+        // the sha is known once WHEREEVAL has compiled the script
+        expect("[0 [a2]]", "WITHIN", "k", "WHEREEVAL", "return FIELDS.a == 2", 0, "IDS", *b)
+        expect("[0 [a2]]", "WITHIN", "k", "WHEREEVALSHA", "14de56b0dfe63af005bce53e4dfd97096f92ccb8", 0, "IDS", *b)
+        expect("1", "SCAN", "k", "WHEREEVAL", "return FIELDS.a == 1", 0, "COUNT")
+
+        fun err(vararg args: Any): String = assertFailsWith<JedisDataException> { raw(*args) }.message!!
+        assertEquals("ERR invalid argument 'a'", err("WITHIN", "k", "WHEREEVAL", "return true", "a", "IDS", *b))
+        assertEquals("ERR sha not found", err("WITHIN", "k", "WHEREEVALSHA", "0000000000000000000000000000000000000000", 0, "IDS", *b))
+        assertEquals(
+            "ERR f_edd4a9a87751b24d2ccb2a6bdfe3aa2504691edc:1: attempt to compare number with nil stack traceback:  " +
+                "f_edd4a9a87751b24d2ccb2a6bdfe3aa2504691edc:1: in main chunk  [G]: ?",
+            err("WITHIN", "k", "WHEREEVAL", "return FIELDS.b > 1", 0, "IDS", *b),
+        )
+        assertEquals(
+            "ERR f_692686ab66f0d273a9648e17e0e1d283f449b60e:1: attempt to create global variable 'x' stack traceback:  " +
+                "[G]: in function (anonymous)  f_692686ab66f0d273a9648e17e0e1d283f449b60e:1: in main chunk  [G]: ?",
+            err("WITHIN", "k", "WHEREEVAL", "x = 1 return true", 0, "IDS", *b),
+        )
+        assertEquals(
+            "ERR f_2b1542794fdd1688e17864bfe9b6bd02547420a8 at EOF:   syntax error\\n",
+            err("WITHIN", "k", "WHEREEVAL", "return 1 +", 0, "IDS", *b),
+        )
+    }
+
+    @Test
     fun whereExpressions() {
         expect("OK", "SET", "fleet", "truck1", "FIELD", "speed", 90, "FIELD", "weight", 1000, "POINT", 33.5, -112.2)
         expect("OK", "SET", "fleet", "truck2", "FIELD", "speed", 45, "POINT", 33.6, -112.3)

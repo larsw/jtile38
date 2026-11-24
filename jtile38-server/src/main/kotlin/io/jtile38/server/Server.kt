@@ -84,6 +84,9 @@ class Server(
     internal val hookRegistry = HookRegistry()
     internal val hookQueue = HookQueue(if (options.appendOnly) File(options.dir, "queue.db") else null)
     internal val pubsub = PubSub()
+
+    /** Lua interpreters and compiled scripts (WHEREEVAL). Created on first use. */
+    internal val luaScripts: LuaScripts by lazy { LuaScripts() }
     internal val endpointManager = EndpointManager { channel, message -> pubsub.publish(channel, message) }
     internal val lives: MutableSet<LiveFence> = ConcurrentHashMap.newKeySet()
 
