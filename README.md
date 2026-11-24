@@ -22,9 +22,16 @@ mvn install                       # build, test and lint all modules
 java -jar jtile38-server/target/jtile38-server.jar -p 9851
 ```
 
-Server options: `-h host` (default `127.0.0.1`), `-p port` (default `9851`), `-d dir` (data
-directory, default `data`), `--appendonly yes|no`, `-o resp|json` (default output for all clients),
-`--dev` (developer mode: enables `MASSINSERT`, `SLEEP` and `SHUTDOWN`).
+Server options: `-h host` (default `127.0.0.1`; `-h ""` listens on all interfaces, which is
+Tile38's default), `-p port` (default `9851`), `-d dir` (data directory, default `data`),
+`--appendonly yes|no`, `-o resp|json` (default output for all clients), `--dev` (developer mode:
+enables `MASSINSERT`, `SLEEP` and `SHUTDOWN`) and `--protected-mode yes|no` (default `no`, as in
+Tile38).
+
+To require a password, set it with `CONFIG SET requirepass <password>` (and `CONFIG REWRITE` to
+keep it); clients then send `AUTH <password>`, or an `Authorization: <password>` header over HTTP.
+With `--protected-mode yes`, a server listening on all interfaces without a password only accepts
+loopback clients.
 
 Try it with `jtile38-cli`, the original `tile38-cli`, `redis-cli` or plain HTTP:
 
@@ -88,7 +95,7 @@ and `TreeSet`, goroutines → virtual threads, `sync.RWMutex` → `ReentrantRead
 
 ## Commands
 
-`PING`, `ECHO`, `QUIT`, `OUTPUT`, `HEALTHZ`, `SERVER` (and `SERVER EXT`), `INFO`, `ROLE`, `STATS`,
+`PING`, `ECHO`, `QUIT`, `AUTH`, `OUTPUT`, `HEALTHZ`, `SERVER` (and `SERVER EXT`), `INFO`, `ROLE`, `STATS`,
 `CONFIG GET|SET|REWRITE`, `CLIENT LIST|GETNAME|SETNAME|KILL`, `TIMEOUT`, `AOFSHRINK`, `KEYS`, `SET` (`POINT`, `BOUNDS`,
 `HASH`, `OBJECT`, `STRING`, `FIELD`, `EX`, `NX`/`XX`, `RETURN`), `GET` (`WITHFIELDS`,
 `OBJECT`/`POINT`/`BOUNDS`/`HASH`), `DEL`, `PDEL`, `DROP`, `RENAME`, `RENAMENX`, `FLUSHDB`, `FSET`,

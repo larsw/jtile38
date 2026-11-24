@@ -14,6 +14,8 @@ import java.io.FileOutputStream
 import java.io.InputStream
 import java.io.OutputStream
 import java.io.RandomAccessFile
+import java.net.Inet4Address
+import java.net.Inet6Address
 import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.Socket
@@ -41,6 +43,11 @@ class ServerOptions(
     val clientOutput: String? = null,
     /** Developer mode: enables MASSINSERT, SLEEP and SHUTDOWN (tile38-server --dev). */
     val devMode: Boolean = false,
+    /**
+     * `--protected-mode yes|no`. Tile38's default is "no" (despite its usage text); with "yes",
+     * only loopback clients may connect while no bind address and no password are configured.
+     */
+    val protectedMode: String = "no",
 )
 
 /** Current time in Unix nanoseconds. */
@@ -108,7 +115,8 @@ class Server(
         // like upstream, the hook queue is loaded before the AOF re-creates the hooks
         hookQueue.open()
         if (options.appendOnly) openAof()
-        val ss = ServerSocket(options.port, 1024, InetAddress.getByName(options.host))
+        // like Tile38, an empty host listens on all interfaces
+        val ss = ServerSocket(options.port, 1024, if (options.host == "") null else InetAddress.getByName(options.host))
         listener = ss
         log.info("Ready to accept connections at ${options.host}:${ss.localPort}")
         Thread.ofVirtual().name("jtile38-accept").start { acceptLoop(ss) }
@@ -221,6 +229,16 @@ class Server(
         }
     }
 
+    /** True when only loopback clients may connect (Go isProtected). */
+    private fun isProtected(): Boolean {
+        // --protected-mode no
+        if (options.protectedMode == "no") return false
+        // -h address
+        val h = options.host
+        if (h != "" && h != "127.0.0.1" && h != "::1" && h != "localhost") return false
+        return config.protectedMode != "no" && config.requirePass == ""
+    }
+
     private fun handleConn(
         sock: Socket,
         client: ClientConn,
@@ -228,6 +246,14 @@ class Server(
         sock.tcpNoDelay = true
         val input: InputStream = sock.getInputStream()
         val output: OutputStream = sock.getOutputStream()
+        // check if the connection is protected: only 127.0.0.1 and ::1 may connect
+        val remote = sock.inetAddress
+        val loopback = (remote is Inet4Address && remote.hostAddress == "127.0.0.1") || (remote is Inet6Address && remote.isLoopbackAddress)
+        if (!loopback && isProtected()) {
+            output.write(DENIED_MESSAGE.toByteArray(Charsets.ISO_8859_1))
+            output.flush()
+            return
+        }
         var buf = ByteArray(64 * 1024)
         var len = 0
         val out = ByteArrayOutputStream()
@@ -493,6 +519,31 @@ class Server(
             msg.args = vs.subList(2, vs.size)
             msg.deadline = Deadline(System.nanoTime() + (secs * 1e9).toLong())
         }
+        // authentication; like Tile38, cmd is still "timeout" for a TIMEOUT-prefixed command
+        val client = msg.client
+        if ((client?.authd != true || cmd == "auth") && cmd != "output" && cmd != "healthz") {
+            val requirePass = config.requirePass
+            if (requirePass != "") {
+                // this better be an AUTH command or the message must carry an Authorization header
+                if (cmd != "auth" && msg.auth == "") {
+                    writeErr("authentication required")
+                    return
+                }
+                val password = if (msg.auth != "") msg.auth else msg.args.getOrElse(1) { "" }
+                if (requirePass != password.trim()) {
+                    writeErr("invalid password")
+                    return
+                }
+                client?.authd = true
+                if (msg.connType != ConnType.HTTP) {
+                    writeOutput(if (msg.outputType == OutputType.JSON) okJson(start).toString() else "+OK\r\n")
+                    return
+                }
+            } else if (msg.command == "auth") {
+                writeErr("invalid password")
+                return
+            }
+        }
         try {
             val res = execute(msg)
             if (res is RespValue.Error) {
@@ -726,6 +777,26 @@ class Server(
     }
 
     companion object {
+        /** Sent to non-loopback clients of a protected server before closing the connection. */
+        private val DENIED_MESSAGE =
+            """
+            -DENIED Tile38 is running in protected mode because protected mode is enabled,
+            no bind address was specified, no authentication password is requested to
+            clients. In this mode connections are only accepted from the loopback
+            interface. If you want to connect from external computers to Tile38 you may
+            adopt one of the following solutions: 1) Just disable protected mode sending
+            the command 'CONFIG SET protected-mode no' from the loopback interface by
+            connecting to Tile38 from the same host the server is running, however MAKE
+            SURE Tile38 is not publicly accessible from internet if you do so. Use CONFIG
+            REWRITE to make this change permanent. 2) Alternatively you can just disable
+            the protected mode by editing the Tile38 configuration file, and setting the
+            protected mode option to 'no', and then restarting the server. 3) If you
+            started the server manually just for testing, restart it with the
+            '--protected-mode no' option. 4) Setup a bind address or an authentication
+            password. NOTE: You only need to do one of the above things in order for the
+            server to start accepting connections from the outside.
+            """.trimIndent().replace("\n", " ") + "\r\n"
+
         private val WRITE_COMMANDS =
             setOf(
                 "set",

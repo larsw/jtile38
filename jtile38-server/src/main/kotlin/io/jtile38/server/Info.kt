@@ -18,6 +18,9 @@ internal class ClientConn(
     @Volatile var name = ""
 
     @Volatile var outputType: OutputType? = null
+
+    /** Whether the connection has authenticated (AUTH or an HTTP Authorization header). */
+    @Volatile var authd = false
     val opened: Long = System.nanoTime()
 
     @Volatile var last: Long = System.nanoTime()

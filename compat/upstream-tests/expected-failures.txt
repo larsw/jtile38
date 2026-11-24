@@ -5,7 +5,7 @@ aof/AOF                          # #28 replication (AOF streaming)
 aof/AOFMD5                       # #28 replication (AOFMD5)
 aof/READONLY                     # #29 READONLY
 aof/migrate                      # #41 legacy AOF migration
-follower/follow                  # #28 replication, #9 CONFIG, #10 requirepass
+follower/follow                  # #28 replication
 keys/WHEREEVAL                   # #31 WHEREEVAL
 metrics/basic                    # #32 Prometheus metrics
 monitor/monitor                  # #39 MONITOR
