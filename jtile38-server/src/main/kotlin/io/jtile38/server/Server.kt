@@ -48,6 +48,8 @@ class ServerOptions(
      * only loopback clients may connect while no bind address and no password are configured.
      */
     val protectedMode: String = "no",
+    /** `--metrics-addr host:port` (or `:port`) for the Prometheus endpoint; empty disables it. */
+    val metricsAddr: String = "",
 )
 
 /** Current time in Unix nanoseconds. */
@@ -74,6 +76,12 @@ class Server(
     internal val config: Config = Config.load(File(options.dir, "config"))
     internal val serverId: String get() = config.serverId
     internal val startedNanos = System.nanoTime()
+    internal val startedEpochSeconds = System.currentTimeMillis() / 1000
+    internal val metrics = Metrics(this)
+
+    /** Labels of tile38_replication_info: role, following, caught_up, caught_up_once. */
+    internal fun replicationLabels(): List<String> = listOf("leader", "", "", "")
+
     internal val outOfMemory =
         java.util.concurrent.atomic
             .AtomicBoolean(false)
@@ -123,6 +131,10 @@ class Server(
         val ss = ServerSocket(options.port, 1024, if (options.host == "") null else InetAddress.getByName(options.host))
         listener = ss
         log.info("Ready to accept connections at ${options.host}:${ss.localPort}")
+        if (options.metricsAddr != "") {
+            log.info("Listening for metrics at: ${options.metricsAddr}")
+            metrics.start(options.metricsAddr)
+        }
         Thread.ofVirtual().name("jtile38-accept").start { acceptLoop(ss) }
         Thread.ofVirtual().name("jtile38-expire").start { expireLoop() }
         return this
@@ -131,6 +143,7 @@ class Server(
     override fun close() {
         if (!stopped.compareAndSet(false, true)) return
         listener?.close()
+        metrics.stop()
         clients.values.forEach { runCatching { it.socket.close() } }
         executor.shutdownNow()
         lock.write {
@@ -472,6 +485,20 @@ class Server(
         out: ByteArrayOutputStream,
     ) {
         val start = System.nanoTime()
+        // like Tile38, every command is timed under its own name (TIMEOUT-prefixed ones as "timeout")
+        val cmd = msg.command
+        try {
+            handleInputCommand0(msg, out, start)
+        } finally {
+            metrics.observe(cmd, System.nanoTime() - start)
+        }
+    }
+
+    private fun handleInputCommand0(
+        msg: Message,
+        out: ByteArrayOutputStream,
+        start: Long,
+    ) {
         val cmd = msg.command
 
         fun writeOutput(res: String) {

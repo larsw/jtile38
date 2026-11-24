@@ -18,7 +18,7 @@ index e93e990..1acabf1 100644
  	closed   bool
  	port     int
  	mport    int
-@@ -109,6 +111,47 @@ func mockOpenServer(opts MockServerOptions) (*mockServer, error) {
+@@ -109,6 +111,50 @@ func mockOpenServer(opts MockServerOptions) (*mockServer, error) {
  		s.mport = getNextPort()
  	}
  	var ferr atomic.Pointer[error] // ferr for when the server fails to start
@@ -30,6 +30,9 @@ index e93e990..1acabf1 100644
 +		}
 +		args := strings.Fields(ext)
 +		args = append(args, "-h", "127.0.0.1", "-p", fmt.Sprint(port), "-d", dir, "--dev")
++		if s.mport != 0 {
++			args = append(args, "--metrics-addr", fmt.Sprintf(":%d", s.mport))
++		}
 +		s.proc = exec.Command(args[0], args[1:]...)
 +		// A server that fails to start prints "error: <message>" on stderr
 +		// and exits; report that message like the in-process server does.
@@ -66,7 +69,7 @@ index e93e990..1acabf1 100644
  	go func() {
  		sopts := server.Options{
  			Host:              "localhost",
-@@ -172,7 +215,11 @@ func (mc *mockServer) Close() {
+@@ -172,7 +218,11 @@ func (mc *mockServer) Close() {
  		return
  	}
  	mc.closed = true

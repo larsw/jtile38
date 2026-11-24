@@ -7,7 +7,7 @@ import kotlin.system.exitProcess
 private fun usage(): Nothing {
     System.err.println(
         """
-        Usage: jtile38-server [-h host] [-p port] [-d dir] [--appendonly yes|no] [-o resp|json] [--dev] [--protected-mode yes|no]
+        Usage: jtile38-server [-h host] [-p port] [-d dir] [--appendonly yes|no] [-o resp|json] [--dev] [--protected-mode yes|no] [--metrics-addr addr]
 
           -h host            listening host (default 127.0.0.1)
           -p port            listening port (default 9851)
@@ -15,6 +15,7 @@ private fun usage(): Nothing {
           --appendonly yes|no  enable the append-only file (default yes)
           -o resp|json       default output type for all clients
           --dev              developer mode (enables MASSINSERT, SLEEP and SHUTDOWN)
+          --metrics-addr addr  listening address (host:port or :port) for Prometheus metrics
           --protected-mode yes|no  only accept loopback clients while no bind address
                              and no password are set (default no)
         """.trimIndent(),
@@ -30,6 +31,7 @@ fun main(args: Array<String>) {
     var output: String? = null
     var dev = false
     var protectedMode = "no"
+    var metricsAddr = ""
     var i = 0
     while (i < args.size) {
         fun value(): String = args.getOrNull(++i) ?: usage()
@@ -52,6 +54,10 @@ fun main(args: Array<String>) {
 
             "-o", "--output" -> {
                 output = value()
+            }
+
+            "--metrics-addr", "-metrics-addr" -> {
+                metricsAddr = value()
             }
 
             "--dev", "-dev" -> {
@@ -88,7 +94,7 @@ fun main(args: Array<String>) {
     }
     val server =
         try {
-            Server(ServerOptions(host, port, dir, appendOnly, output, dev, protectedMode)).start()
+            Server(ServerOptions(host, port, dir, appendOnly, output, dev, protectedMode, metricsAddr)).start()
         } catch (e: Exception) {
             // the last "error: " line on stderr is the startup failure (used by test harnesses)
             System.err.println("error: " + (e.message ?: e.toString()))

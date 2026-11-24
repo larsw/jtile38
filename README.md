@@ -25,8 +25,10 @@ java -jar jtile38-server/target/jtile38-server.jar -p 9851
 Server options: `-h host` (default `127.0.0.1`; `-h ""` listens on all interfaces, which is
 Tile38's default), `-p port` (default `9851`), `-d dir` (data directory, default `data`),
 `--appendonly yes|no`, `-o resp|json` (default output for all clients), `--dev` (developer mode:
-enables `MASSINSERT`, `SLEEP` and `SHUTDOWN`) and `--protected-mode yes|no` (default `no`, as in
-Tile38).
+enables `MASSINSERT`, `SLEEP` and `SHUTDOWN`), `--protected-mode yes|no` (default `no`, as in
+Tile38) and `--metrics-addr host:port` (serves Prometheus metrics at `/metrics`: the same `tile38_*`
+series as Tile38, process metrics, and `go_build_info`/`go_goroutines`/`go_threads` with JVM values
+so that dashboards made for Tile38 keep working).
 
 To require a password, set it with `CONFIG SET requirepass <password>` (and `CONFIG REWRITE` to
 keep it); clients then send `AUTH <password>`, or an `Authorization: <password>` header over HTTP.
@@ -166,7 +168,7 @@ All Kotlin code is checked with ktlint during `mvn verify`. Run `mvn ktlint:form
 issues. See [CLAUDE.md](CLAUDE.md) for conventions.
 
 `scripts/run-upstream-tests.sh` runs Tile38's own integration test suite against jtile38 and fails
-on regressions; see [compat/upstream-tests](compat/upstream-tests/README.md). Currently 72 of its 86
+on regressions; see [compat/upstream-tests](compat/upstream-tests/README.md). Currently 73 of its 86
 sub-tests pass, and each remaining failure is tracked in an issue.
 
 More compatibility checks against the original Tile38 (build `tile38-server` and `tile38-cli`
